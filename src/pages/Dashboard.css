@@ -1,0 +1,208 @@
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.greeting h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.greeting p {
+  color: var(--text-secondary);
+}
+
+.header-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.stat-pill {
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  border-radius: 30px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.automation-card, .workout-plan, .progress-tracker {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.automation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auto-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.auto-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.auto-info span {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.auto-info small {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.btn-auto {
+  background: transparent;
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: auto;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(0, 242, 255, 0.1);
+}
+
+.exercise-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.exercise-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pending .circle-placeholder {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #333;
+  border-radius: 50%;
+}
+
+.ex-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.ex-info span {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.ex-info small {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.btn-action {
+  background: var(--accent-cyan);
+  border: none;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: auto;
+}
+
+.btn-action:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glow-cyan);
+}
+
+.nutrition, .progress-tracker {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.macros-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.macro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.macro-val {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.macro-label {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #222;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+}
+
+.fill.purple { background: var(--accent-purple); box-shadow: var(--glow-purple); }
+.fill.cyan { background: var(--accent-cyan); box-shadow: var(--glow-cyan); }
+
+.chart-container {
+  margin-top: 10px;
+}
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
