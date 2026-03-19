@@ -51,6 +51,7 @@ from .services import (
     pseudo_embedding,
     fastapi_post,
     calculate_streak,
+    recognize_food_from_image,
 )
 
 
@@ -233,7 +234,40 @@ class FoodRecognitionView(APIView):
         serializer = FoodImageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        fastapi_result = fastapi_post('/nutrition/recognize', serializer.validated_data)
+        image_data = serializer.validated_data.get('image_data')
+        image_url = serializer.validated_data.get('image_url')
+
+        # Try Gemini Vision API first with image_data
+        if image_data:
+            gemini_result = recognize_food_from_image(image_data)
+            if gemini_result:
+                nutrition = NutritionLog.objects.create(
+                    user=request.user,
+                    food_name=gemini_result['food'],
+                    calories=gemini_result['calories'],
+                    protein=gemini_result['protein'],
+                    carbs=gemini_result['carbs'],
+                    fats=gemini_result['fats'],
+                )
+                return Response({
+                    'recognition': {
+                        'detected_food': gemini_result['food'],
+                        'calories': gemini_result['calories'],
+                        'protein': gemini_result['protein'],
+                        'carbs': gemini_result['carbs'],
+                        'fats': gemini_result['fats'],
+                        'source': 'gemini_vision'
+                    },
+                    'saved': NutritionLogSerializer(nutrition).data
+                })
+
+        # Fallback: try FastAPI service if Gemini fails
+        fallback_data = {}
+        if image_url:
+            fallback_data['image_url'] = image_url
+
+        fastapi_result = fastapi_post('/nutrition/recognize', fallback_data) if fallback_data else None
+
         if not fastapi_result:
             detected = nutrition_lookup('sample meal')
             fastapi_result = {
@@ -385,26 +419,20 @@ class RecommendationEngineView(APIView):
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
         last_workout = WorkoutSession.objects.filter(user=request.user).order_by('-created_at').first()
 
-        # Try FastAPI service first
-        fastapi_result = fastapi_post('/recommendation/workout', serializer.validated_data)
+        # Always use AI-powered recommendations (Groq)
+        user_profile = {'goal': profile.goal, 'diet_type': profile.diet_type}
+        recent_metrics = {
+            'streak': profile.streak_days,
+            'sleep_hours': serializer.validated_data.get('sleep_hours', 7),
+            'fatigue': serializer.validated_data.get('fatigue', 50),
+            'performance': serializer.validated_data.get('performance', 70),
+            'last_workout': last_workout.exercise_name if last_workout else 'None'
+        }
+        recommendation = ai_workout_recommendation(user_profile, recent_metrics)
 
-        if not fastapi_result:
-            # Fall back to AI-powered recommendations
-            user_profile = {'goal': profile.goal, 'diet_type': profile.diet_type}
-            recent_metrics = {
-                'streak': profile.streak_days,
-                'sleep_hours': serializer.validated_data.get('sleep_hours', 7),
-                'fatigue': serializer.validated_data.get('fatigue', 50),
-                'performance': serializer.validated_data.get('performance', 70),
-                'last_workout': last_workout.exercise_name if last_workout else 'None'
-            }
-            recommendation = ai_workout_recommendation(user_profile, recent_metrics)
-
-            if 'ai_recommendation' not in recommendation:
-                # Use rule-based if AI fails
-                recommendation = workout_recommendation(**serializer.validated_data)
-        else:
-            recommendation = fastapi_result
+        if 'ai_recommendation' not in recommendation:
+            # Use rule-based if AI fails
+            recommendation = workout_recommendation(**serializer.validated_data)
 
         RecommendationLog.objects.create(
             user=request.user,

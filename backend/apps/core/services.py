@@ -1,10 +1,12 @@
 import hashlib
 import json
 import os
+import base64
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 from groq import Groq
+import google.generativeai as genai
 
 
 def get_groq_client():
@@ -40,6 +42,119 @@ def groq_chat_completion(messages: list, model: str = "llama-3.3-70b-versatile")
         return chat_completion.choices[0].message.content
     except Exception as e:
         print(f"Groq API error: {e}")
+        return None
+
+
+def get_gemini_client():
+    """Get Gemini client and configure API key."""
+    api_key = os.getenv('GEMINI_API_KEY', '')
+    if api_key:
+        genai.configure(api_key=api_key)
+        return genai
+    return None
+
+
+def recognize_food_from_image(image_data: str):
+    """
+    Use Gemini Vision API to recognize food from image and extract nutrition info.
+
+    Args:
+        image_data: Base64 encoded image string (data URI or plain base64)
+
+    Returns:
+        dict with food_name, calories, protein, carbs, fats
+    """
+    genai_client = get_gemini_client()
+    if not genai_client:
+        return None
+
+    try:
+        # Handle data URI format (e.g., "data:image/jpeg;base64,...")
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+
+        # Decode base64 to bytes
+        image_bytes = base64.b64decode(image_data)
+
+        # Create Gemini model for vision
+        model = genai_client.GenerativeModel('gemini-1.5-flash')
+
+        # Create prompt for food recognition
+        prompt = """Analyze this food image and provide:
+1. Food name
+2. Estimated serving size
+3. Estimated calories per 100g
+4. Estimated protein (g per 100g)
+5. Estimated carbs (g per 100g)
+6. Estimated fats (g per 100g)
+
+Respond in exactly this format (numbers only):
+Food: [food name]
+Calories: [number]
+Protein: [number]
+Carbs: [number]
+Fats: [number]"""
+
+        # Send image and prompt to Gemini
+        response = model.generate_content([
+            prompt,
+            {
+                'mime_type': 'image/jpeg',
+                'data': image_bytes
+            }
+        ])
+
+        if response and response.text:
+            return parse_gemini_nutrition_response(response.text)
+
+        return None
+
+    except Exception as e:
+        print(f"Gemini API error: {e}")
+        return None
+
+
+def parse_gemini_nutrition_response(response_text: str):
+    """Parse Gemini response to extract nutrition data."""
+    try:
+        import re
+        lines = response_text.strip().split('\n')
+        nutrition = {
+            'food_name': 'Food Item',
+            'calories': 100,
+            'protein': 5,
+            'carbs': 10,
+            'fats': 5
+        }
+
+        for line in lines:
+            line_lower = line.lower()
+            numbers = re.findall(r'[\d.]+', line)
+
+            if numbers:
+                value = float(numbers[0])
+
+                if 'food' in line_lower and ':' in line:
+                    nutrition['food_name'] = line.split(':')[-1].strip()
+                elif 'calorie' in line_lower:
+                    nutrition['calories'] = int(value)
+                elif 'protein' in line_lower:
+                    nutrition['protein'] = round(value, 1)
+                elif 'carb' in line_lower:
+                    nutrition['carbs'] = round(value, 1)
+                elif 'fat' in line_lower:
+                    nutrition['fats'] = round(value, 1)
+
+        return {
+            'food': nutrition['food_name'],
+            'calories': nutrition['calories'],
+            'protein': nutrition['protein'],
+            'carbs': nutrition['carbs'],
+            'fats': nutrition['fats'],
+            'source': 'gemini_vision'
+        }
+    except Exception as e:
+        print(f"Error parsing Gemini response: {e}")
         return None
 
 

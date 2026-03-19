@@ -46,7 +46,7 @@ export function fetchFoodEstimate(foodName) {
 export function recognizeFood(imageData) {
   return request('/nutrition/recognize/', {
     method: 'POST',
-    body: JSON.stringify({ image: imageData }),
+    body: JSON.stringify({ image_data: imageData }),
   })
 }
 

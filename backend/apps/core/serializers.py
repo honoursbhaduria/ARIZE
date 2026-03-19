@@ -65,7 +65,8 @@ class NutritionLogSerializer(serializers.ModelSerializer):
 
 
 class FoodImageSerializer(serializers.Serializer):
-    image_url = serializers.URLField()
+    image_url = serializers.URLField(required=False, allow_blank=True)
+    image_data = serializers.CharField(required=False, allow_blank=True)
 
 
 class SleepLogSerializer(serializers.ModelSerializer):

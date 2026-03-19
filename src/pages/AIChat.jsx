@@ -1,24 +1,54 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Bot, Brain, Sparkles, Send, BarChart4 } from 'lucide-react'
+import { Bot, Brain, Sparkles, Send, BarChart4, Trash2, Save } from 'lucide-react'
 import { sendChatMessage } from '../services/api'
 import './FeaturePages.css'
 
 export default function AIChat() {
-  const [question, setQuestion] = useState('Give me veg high-protein diet for muscle gain')
-  const [answer, setAnswer] = useState('Your plan should target 120-140g protein with paneer, tofu, curd, lentils, and soy chunks.')
+  const [chatHistory, setChatHistory] = useState([])
+  const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
+  const [saveHistory, setSaveHistory] = useState(false)
 
   const askAi = async () => {
     if (!question.trim()) return
     setLoading(true)
+
     try {
       const result = await sendChatMessage(question)
-      setAnswer(result.answer)
-    } catch {
-      setAnswer('AI service is unavailable. Please check backend env/API keys and try again.')
+      const newEntry = {
+        id: Date.now(),
+        question,
+        answer: result.answer,
+        source: result.source || 'groq_ai',
+        timestamp: new Date().toLocaleTimeString()
+      }
+      setChatHistory([...chatHistory, newEntry])
+      setQuestion('')
+    } catch (error) {
+      const errorEntry = {
+        id: Date.now(),
+        question,
+        answer: 'AI service is unavailable. Please check backend env/API keys and try again.',
+        source: 'error',
+        timestamp: new Date().toLocaleTimeString()
+      }
+      setChatHistory([...chatHistory, errorEntry])
+      setQuestion('')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const clearHistory = () => {
+    if (window.confirm('Clear chat history?')) {
+      setChatHistory([])
+    }
+  }
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      askAi()
     }
   }
 
@@ -60,15 +90,77 @@ export default function AIChat() {
           </ul>
         </article>
 
-        <article className="feature-card glass">
-          <h3><Sparkles size={16} /> Ask BeastTrack AI</h3>
+        <article className="feature-card glass" style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0 }}><Sparkles size={16} style={{ marginRight: '8px' }} /> Ask BeastTrack AI</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', opacity: 0.7 }}>
+                <input
+                  type="checkbox"
+                  checked={saveHistory}
+                  onChange={(e) => setSaveHistory(e.target.checked)}
+                />
+                Save History
+              </label>
+              {chatHistory.length > 0 && (
+                <button
+                  className="btn-primary btn-secondary"
+                  onClick={clearHistory}
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                >
+                  <Trash2 size={12} /> Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Chat History */}
+          {chatHistory.length > 0 && (
+            <div style={{
+              backgroundColor: 'rgba(15, 23, 42, 0.5)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px',
+              maxHeight: '300px',
+              overflowY: 'auto'
+            }}>
+              {chatHistory.map((entry) => (
+                <div key={entry.id} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid rgba(100, 116, 139, 0.2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <strong style={{ color: '#60a5fa', fontSize: '13px' }}>You:</strong>
+                    <span style={{ fontSize: '11px', opacity: 0.6 }}>{entry.timestamp}</span>
+                  </div>
+                  <p style={{ margin: '4px 0', fontSize: '13px', opacity: 0.85 }}>{entry.question}</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', marginBottom: '4px' }}>
+                    <strong style={{ color: '#10b981', fontSize: '13px' }}>BeastTrack AI:</strong>
+                    <span style={{ fontSize: '10px', opacity: 0.5, fontStyle: 'italic' }}>{entry.source === 'groq_ai' ? '🤖 Groq' : entry.source}</span>
+                  </div>
+                  <p style={{ margin: '4px 0', fontSize: '13px', opacity: 0.9, lineHeight: '1.4' }}>{entry.answer}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input Form */}
           <div className="inline-form">
-            <textarea value={question} onChange={(e) => setQuestion(e.target.value)} />
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask anything about your fitness... (Ctrl+Enter to send)"
+              style={{ minHeight: '80px', resize: 'vertical' }}
+            />
             <button className="btn-primary" type="button" onClick={askAi} disabled={loading}>
               {loading ? 'Thinking...' : 'Ask AI'} <Send size={14} />
             </button>
           </div>
-          <p><strong>AI:</strong> {answer}</p>
+
+          {/* Empty State */}
+          {chatHistory.length === 0 && (
+            <p style={{ textAlign: 'center', opacity: 0.6, fontSize: '14px', marginTop: '16px' }}>
+              No conversations yet. Start by asking BeastTrack AI a question!
+            </p>
+          )}
         </article>
       </section>
     </motion.div>

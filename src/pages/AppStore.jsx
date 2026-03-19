@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Search, Upload, Apple, ShoppingCart, Loader } from 'lucide-react'
-import { fetchFoodEstimate, getShoppingSuggestions } from '../services/api'
+import { Search, Upload, Apple, ShoppingCart, Loader, Camera, X } from 'lucide-react'
+import { fetchFoodEstimate, getShoppingSuggestions, recognizeFood } from '../services/api'
 import './FeaturePages.css'
 
 export default function AppStore() {
@@ -11,6 +11,14 @@ export default function AppStore() {
   const [errorMessage, setErrorMessage] = useState('')
   const [shoppingSuggestions, setShoppingSuggestions] = useState([])
   const [isLoadingShopping, setIsLoadingShopping] = useState(false)
+
+  // Image upload states
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const handleFoodSearch = async (e) => {
     e.preventDefault()
@@ -39,6 +47,75 @@ export default function AppStore() {
       setErrorMessage(error.message || 'Failed to load shopping suggestions')
     } finally {
       setIsLoadingShopping(false)
+    }
+  }
+
+  // Image upload handlers
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      setCameraActive(true)
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+    } catch (error) {
+      setErrorMessage('Camera not accessible. Please check permissions.')
+    }
+  }
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop())
+    }
+    setCameraActive(false)
+    setImagePreview(null)
+  }
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const context = canvasRef.current.getContext('2d')
+      canvasRef.current.width = videoRef.current.videoWidth
+      canvasRef.current.height = videoRef.current.videoHeight
+      context.drawImage(videoRef.current, 0, 0)
+      const imageData = canvasRef.current.toDataURL('image/jpeg')
+      setImagePreview(imageData)
+      uploadImage(imageData)
+    }
+  }
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const imageData = event.target?.result
+        setImagePreview(imageData)
+        uploadImage(imageData)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const uploadImage = async (imageData) => {
+    setIsUploadingImage(true)
+    setErrorMessage('')
+    try {
+      const response = await recognizeFood(imageData)
+      if (response.recognition) {
+        setNutritionData({
+          food: response.recognition.detected_food,
+          calories: response.recognition.calories,
+          protein: response.recognition.protein,
+          carbs: response.recognition.carbs,
+          fats: response.recognition.fats,
+          source: response.recognition.source || 'image_recognition'
+        })
+      }
+      stopCamera()
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to analyze food image')
+    } finally {
+      setIsUploadingImage(false)
     }
   }
 
@@ -104,10 +181,76 @@ export default function AppStore() {
 
         <article className="feature-card glass">
           <h3><Upload size={16} /> Upload Food Image</h3>
-          <p>Image inference pipeline detects likely food item and serving size estimate.</p>
-          <button className="btn-primary btn-secondary" type="button" disabled>
-            Choose Image (Coming Soon)
-          </button>
+          <p>Capture photo or upload image to get AI-powered food analysis with calorie estimates.</p>
+
+          {cameraActive && (
+            <div style={{ marginBottom: '12px', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+              />
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <button
+                  className="btn-primary"
+                  onClick={capturePhoto}
+                  disabled={isUploadingImage}
+                  style={{ flex: 1 }}
+                >
+                  {isUploadingImage ? <Loader size={16} /> : 'Capture Photo'}
+                </button>
+                <button
+                  className="btn-primary btn-secondary"
+                  onClick={stopCamera}
+                  style={{ flex: 1 }}
+                >
+                  <X size={16} /> Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {imagePreview && !cameraActive && (
+            <div style={{ marginBottom: '12px', borderRadius: '8px', overflow: 'hidden' }}>
+              <img
+                src={imagePreview}
+                alt="Preview"
+                style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'cover' }}
+              />
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {!cameraActive && (
+              <>
+                <button
+                  className="btn-primary btn-secondary"
+                  onClick={startCamera}
+                  disabled={isUploadingImage}
+                  style={{ flex: 1 }}
+                >
+                  <Camera size={16} /> Take Photo
+                </button>
+                <button
+                  className="btn-primary btn-secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                  style={{ flex: 1 }}
+                >
+                  <Upload size={16} /> Choose File
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
+              </>
+            )}
+          </div>
         </article>
 
         <article className="feature-card glass">
