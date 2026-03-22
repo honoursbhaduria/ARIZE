@@ -1,34 +1,65 @@
 # ARIZE (AI Arena)
 
-ARIZE is a React + Django fitness platform with AI-assisted workout, nutrition, analytics, shopping, and integrations.
+ARIZE is an AI-powered fitness platform built with React, Django, and FastAPI.
+It combines workout tracking, nutrition analysis, AI coaching, analytics, shopping recommendations, and integrations in one app.
 
-## Current Features
+## Features
 
-- Authentication: email/password + Google login, JWT session flow
-- User Hub dashboard: profile setup, notifications, progress photo upload
-- Today Workout Plan: local task persistence, add/remove/toggle tasks, return reminder toast
-- Computer Vision workout tracking: rep/session analysis + uploaded workout video analysis
-- Nutrition Intelligence: food search, Groq-backed calorie search, image-based recognition flow
-- AI Brain chat: contextual coaching with recommendation support
-- Analytics: consistency analytics + district streak leaderboard
-- Shopping: suggestions, chat, Wikipedia product search, cart operations
-- Integrations: fitness bands, WhatsApp trigger, music recommendation with resilient fallback behavior
+### User & Auth
+- Email/password signup + login
+- Google login flow
+- JWT access + refresh token session
+- Onboarding quiz and protected app shell
+
+### Dashboard & Progress
+- Daily summary cards (reps, calories, streak, completion)
+- Workout task planner with local persistence
+- Progress photo upload and gallery view
+- Notification preferences and profile settings
+
+### Workout & Computer Vision
+- Real-time rep counter page
+- CV workout analysis endpoint
+- Video workout upload + analysis
+- Workout summary and session logs
+
+### Nutrition Intelligence
+- Food name to calories/macros estimate
+- Food image recognition for nutrition values
+- Nutrition logs and daily macro tracking
+
+### AI Assistant & Recommendations
+- AI chat coach
+- RAG memory endpoints
+- Workout recommendation engine
+
+### Integrations & Extras
+- Fitness band sync endpoints
+- Sleep logs
+- WhatsApp integration endpoint
+- Music recommendation panel
+
+### Shopping AI
+- AI shopping chat
+- Product discovery (Wikipedia/product links)
+- Cart add/update/delete flow
 
 ## Tech Stack
 
-- Frontend: React 19, Vite, React Router, Framer Motion, Recharts
-- Backend: Django 5, DRF, SimpleJWT, CORS
-- AI/LLM: Groq, LangChain, LangGraph
-- Vision/Nutrition: Gemini integration support + MediaPipe/OpenCV pipeline hooks
-- Optional microservice: FastAPI AI service
+- Frontend: React 19, Vite, React Router, Framer Motion
+- Backend: Django 5, Django REST Framework, SimpleJWT
+- AI stack: Groq, LangChain, LangGraph, Gemini integration hooks
+- CV stack: MediaPipe/OpenCV integration hooks
+- Optional service: FastAPI microservice
 
 ## Repository Structure
 
-- frontend/: React + Vite frontend
-- backend/: Django REST backend
-- fastapi_service/: optional FastAPI service
+- `frontend/` React + Vite app
+- `backend/` Django API
+- `fastapi_service/` FastAPI service
+- `DEPLOYMENT.md` deployment guide (free-tier friendly)
 
-## Quick Start
+## How to Start (Local Development)
 
 ### 1) Frontend
 
@@ -39,9 +70,9 @@ cp .env.example .env
 npm run dev
 ```
 
-Default frontend: http://localhost:5173
+Frontend runs at `http://localhost:5173`.
 
-### 2) Backend
+### 2) Django Backend
 
 ```bash
 python -m venv .venv
@@ -53,124 +84,59 @@ python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
 ```
 
-Backend API base URL: http://localhost:8000/api
+Backend runs at `http://localhost:8000/api`.
 
-### 3) Optional FastAPI Service
+### 3) FastAPI Service (Optional but recommended)
 
 ```bash
+source .venv/bin/activate
 pip install -r fastapi_service/requirements.txt
+cp fastapi_service/.env.example fastapi_service/.env
 python -m uvicorn fastapi_service.main:app --host 0.0.0.0 --port 9000
 ```
 
-FastAPI base URL: http://localhost:9000
+FastAPI runs at `http://localhost:9000`.
 
-## Frontend Routes
+## Main Frontend Routes
 
-- /: Landing
-- /login, /register
-- /dashboard
-- /vision
-- /nutrition
-- /analytics
-- /chat
-- /integrations
-- /counter
-- /shopping-cart
+- `/`
+- `/login`, `/register`
+- `/onboarding`
+- `/dashboard`
+- `/counter`
+- `/vision`
+- `/nutrition`
+- `/chat`
+- `/analytics`
+- `/integrations`
+- `/gallery`
+- `/shopping-cart`
+- `/settings`
 
-Note: all routes except landing/login/register are protected in frontend routing.
+## Core API Surface (Django)
 
-## Backend API Endpoints (Core)
+- Auth: `/api/auth/*`
+- Profile: `/api/profile/`
+- Dashboard: `/api/dashboard/*`
+- Workouts/CV: `/api/workouts/*`
+- Nutrition: `/api/nutrition/*`
+- Analytics: `/api/analytics/*`
+- AI/Recommendations: `/api/chat/ask/`, `/api/recommendations/workout/`, `/api/rag/memory/`
+- Integrations: `/api/integrations/*`, `/api/music/recommend/`, `/api/sleep/logs/`
+- Shopping: `/api/shopping/*`
+- System: `/api/health/`, `/api/features/`
 
-### Auth / Profile
+## Deployment
 
-- POST /api/auth/signup/
-- POST /api/auth/login/
-- POST /api/auth/google/
-- POST /api/auth/token/refresh/
-- GET/PUT /api/profile/
+Use [DEPLOYMENT.md](DEPLOYMENT.md) for full free deployment setup (Vercel + Render).
 
-### Dashboard / Workouts / CV
+## Contributing Rules
 
-- GET /api/dashboard/summary/
-- GET /api/dashboard/progress/
-- GET/POST /api/workouts/sessions/
-- POST /api/workouts/cv/analyze/
-- POST /api/workouts/video/analyze/
-- GET /api/workouts/summary/
+Please follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Nutrition
-
-- POST /api/nutrition/recognize/
-- POST /api/nutrition/search/
-- POST /api/nutrition/search/groq/
-- GET /api/nutrition/logs/
-
-### Analytics
-
-- GET /api/analytics/consistency/
-- GET /api/analytics/streak-leaderboard/
-- GET /api/analytics/overview/
-
-### AI / Recommendations
-
-- GET/POST /api/rag/memory/
-- POST /api/chat/ask/
-- POST /api/recommendations/workout/
-
-### Integrations
-
-- GET/POST /api/sleep/logs/
-- GET/POST /api/integrations/bands/sync/
-- POST /api/integrations/whatsapp/send/
-- POST /api/music/recommend/
-
-### Shopping
-
-- POST /api/shopping/suggestions/
-- GET /api/shopping/wikipedia/search/
-- POST /api/shopping/chat/
-- GET /api/shopping/cart/
-- DELETE /api/shopping/cart/
-- POST /api/shopping/cart/add/
-- DELETE /api/shopping/cart/item/<item_id>/
-- PUT /api/shopping/cart/item/<item_id>/update/
-
-### Other
-
-- GET /api/features/
-- GET /api/health/
-- GET/POST /api/progress/photos/
-- GET/PUT /api/notifications/preferences/
-
-## FastAPI Endpoints
-
-- GET /health
-- POST /cv/analyze
-- POST /nutrition/recognize
-- POST /chat/respond
-- POST /recommendation/workout
-
-## Environment Variables
-
-Frontend envs (from frontend/.env.example):
-
-- VITE_API_BASE_URL
-- VITE_GOOGLE_CLIENT_ID
-- VITE_SPOTIFY_CLIENT_ID
-- VITE_YOUTUBE_API_KEY
-
-Backend envs (from backend/.env.example):
-
-- DJANGO_SECRET_KEY, DJANGO_DEBUG, DJANGO_ALLOWED_HOSTS
-- CORS_ALLOWED_ORIGINS
-- FASTAPI_SERVICE_URL
-- GROQ_API_KEY
-- LANGCHAIN_* and LANGGRAPH_* settings
-- GYMNASIUM_ANALYSIS_ENABLED
-- GEMINI / nutrition / integration keys (as configured)
-- YOUTUBE_API_KEY
-
-## Notes
-
-- For LAN testing, run frontend and backend on 0.0.0.0 and use the machine IP in browser.
-- If external APIs are unavailable, several frontend modules now include graceful fallback behavior.
+Quick rules:
+- Keep changes scoped to the requested feature/bug.
+- Do not break existing API contracts or route names without migration notes.
+- Add or update docs when behavior changes.
+- Run frontend build/tests and backend checks before opening PR.
+- Prefer small, reviewable PRs with clear commit messages.
