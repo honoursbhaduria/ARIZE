@@ -13,3 +13,5 @@ langchain==0.3.14
 langchain-groq==0.2.2
 langgraph==0.2.67
 gymnasium==0.29.1
+gunicorn==23.0.0
+whitenoise==6.9.0

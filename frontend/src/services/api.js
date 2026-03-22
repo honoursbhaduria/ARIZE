@@ -1,6 +1,9 @@
 const DEFAULT_API_BASE_URL = (() => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     const host = window.location.hostname
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return `${window.location.origin}/api`
+    }
     return `http://${host}:8000/api`
   }
   return 'http://localhost:8000/api'
