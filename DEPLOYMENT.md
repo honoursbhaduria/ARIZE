@@ -81,3 +81,22 @@ For production, use managed Postgres (Neon/Supabase/Render Postgres).
 - FastAPI: `https://<fastapi-service>.onrender.com/health`
 
 If both are healthy and frontend env vars are correct, app is deployment-ready.
+
+---
+
+## 7) Keep-Alive Cron (Render)
+
+This repo includes a Render cron service in `render.yaml`:
+
+- Service name: `ai-arena-keepalive`
+- Schedule: every 5 minutes
+- Command: `python scripts/keepalive.py`
+
+It pings:
+
+- `KEEPALIVE_DJANGO_URL`
+- `KEEPALIVE_FASTAPI_URL`
+
+Update these env vars to your real Render URLs after your first deploy.
+
+Note: this reduces idle cold starts, but free-tier behavior can still vary by platform policy.

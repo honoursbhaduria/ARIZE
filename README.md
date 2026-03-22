@@ -61,6 +61,37 @@ It combines workout tracking, nutrition analysis, AI coaching, analytics, shoppi
 
 ## How to Start (Local Development)
 
+## Docker Quick Start (Full Stack)
+
+Run all services (React + Django + FastAPI) in containers:
+
+```bash
+docker compose up --build
+```
+
+Access:
+- Frontend: `http://localhost:8080`
+- Django API: `http://localhost:8000/api`
+- FastAPI: `http://localhost:9000`
+
+Stop services:
+
+```bash
+docker compose down
+```
+
+Rebuild after dependency changes:
+
+```bash
+docker compose build --no-cache
+docker compose up
+```
+
+Notes:
+- `frontend` container proxies `/api/*` requests to Django.
+- Django talks to FastAPI using internal Docker DNS (`http://fastapi:9000`).
+- Keep `backend/.env` and `fastapi_service/.env` present for environment variables.
+
 ### 1) Frontend
 
 ```bash

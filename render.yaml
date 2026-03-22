@@ -28,3 +28,17 @@ services:
     envVars:
       - key: FASTAPI_CORS_ORIGINS
         value: https://ai-arena-frontend.vercel.app
+
+  - type: cron
+    name: ai-arena-keepalive
+    env: python
+    rootDir: .
+    plan: free
+    schedule: "*/5 * * * *"
+    buildCommand: "echo keepalive"
+    startCommand: "python scripts/keepalive.py"
+    envVars:
+      - key: KEEPALIVE_DJANGO_URL
+        value: ""
+      - key: KEEPALIVE_FASTAPI_URL
+        value: ""
