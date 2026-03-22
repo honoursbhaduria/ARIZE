@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: ai-arena-django
+    env: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate && gunicorn beasttrack_backend.wsgi:application --bind 0.0.0.0:$PORT
+    autoDeploy: true
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ai-arena-django.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://ai-arena-frontend.vercel.app
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://ai-arena-frontend.vercel.app
+
+  - type: web
+    name: ai-arena-fastapi
+    env: python
+    rootDir: fastapi_service
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: FASTAPI_CORS_ORIGINS
+        value: https://ai-arena-frontend.vercel.app
