@@ -126,9 +126,6 @@ FastAPI runs at `http://localhost:9000`.
 - Shopping: `/api/shopping/*`
 - System: `/api/health/`, `/api/features/`
 
-## Deployment
-
-Use [DEPLOYMENT.md](DEPLOYMENT.md) for full free deployment setup (Vercel + Render).
 
 ## Contributing Rules
 
