@@ -1,0 +1,150 @@
+.nutrition-page {
+	display: grid;
+	gap: 14px;
+}
+
+.nutrition-hero,
+.nutrition-card {
+	border-radius: 10px;
+	padding: 16px;
+}
+
+.nutrition-hero {
+	display: grid;
+	gap: 12px;
+}
+
+.nutrition-kicker {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-secondary);
+	font-size: 0.8rem;
+	margin-bottom: 6px;
+}
+
+.nutrition-hero h1 {
+	color: var(--text-primary);
+	font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+	margin-bottom: 8px;
+}
+
+.nutrition-hero p,
+.nutrition-card p {
+	color: var(--text-secondary);
+}
+
+.nutrition-macro-strip {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.nutrition-macro-strip div {
+	border: 1px solid var(--border-subtle);
+	background: var(--surface-2);
+	border-radius: 8px;
+	padding: 10px;
+	display: grid;
+	gap: 4px;
+}
+
+.nutrition-macro-strip small {
+	color: var(--text-secondary);
+}
+
+.nutrition-macro-strip strong {
+	color: var(--text-primary);
+}
+
+.nutrition-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px;
+}
+
+.nutrition-card h2 {
+	color: var(--text-primary);
+	font-size: 1rem;
+	margin-bottom: 10px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.nutrition-form {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+
+.nutrition-form input {
+	border: 1px solid var(--border-subtle);
+	background: var(--surface-2);
+	color: var(--text-primary);
+	border-radius: 8px;
+	padding: 10px 12px;
+}
+
+.image-upload-label {
+	border: 1px dashed var(--border-strong);
+	border-radius: 8px;
+	background: var(--surface-2);
+	color: var(--text-secondary);
+	padding: 14px;
+	display: inline-flex;
+	justify-content: center;
+	width: 100%;
+	cursor: pointer;
+	margin-bottom: 10px;
+}
+
+.image-upload-label input {
+	display: none;
+}
+
+.nutrition-preview {
+	width: 100%;
+	max-height: 240px;
+	object-fit: cover;
+	border-radius: 8px;
+	border: 1px solid var(--border-subtle);
+	margin-bottom: 10px;
+}
+
+.nutrition-json {
+	margin: 0;
+	padding: 10px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	background: var(--surface-2);
+	color: var(--text-secondary);
+	font-size: 0.8rem;
+	max-height: 220px;
+	overflow: auto;
+}
+
+.nutrition-error {
+	color: #e3a4a4;
+	margin: 0 0 8px;
+}
+
+.shopping-panel {
+	display: grid;
+	gap: 10px;
+}
+
+@media (max-width: 960px) {
+	.nutrition-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.nutrition-form {
+		grid-template-columns: 1fr;
+	}
+
+	.nutrition-macro-strip {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

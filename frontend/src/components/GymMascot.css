@@ -1,0 +1,147 @@
+.gym-mascot {
+  position: fixed;
+  right: 18px;
+  bottom: 14px;
+  width: 68px;
+  height: 86px;
+  z-index: 12;
+  opacity: 0.68;
+  pointer-events: auto;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  animation: mascot-idle 2.8s ease-in-out infinite;
+}
+
+.mascot-head,
+.mascot-body,
+.mascot-arm,
+.mascot-leg {
+  position: absolute;
+  background: #9aa8ba;
+}
+
+.mascot-head {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  left: 25px;
+  top: 0;
+}
+
+.mascot-body {
+  width: 24px;
+  height: 26px;
+  border-radius: 6px;
+  left: 22px;
+  top: 20px;
+}
+
+.mascot-arm {
+  width: 7px;
+  height: 22px;
+  border-radius: 4px;
+  top: 24px;
+}
+
+.mascot-arm.left {
+  left: 14px;
+  transform: rotate(18deg);
+  animation: arm-left 2.4s ease-in-out infinite;
+}
+
+.mascot-arm.right {
+  right: 14px;
+  transform: rotate(-18deg);
+  animation: arm-right 2.4s ease-in-out infinite;
+}
+
+.mascot-leg {
+  width: 8px;
+  height: 24px;
+  border-radius: 4px;
+  top: 48px;
+}
+
+.mascot-leg.left {
+  left: 24px;
+}
+
+.mascot-leg.right {
+  right: 24px;
+}
+
+.mascot-note {
+  position: absolute;
+  left: -42px;
+  top: -20px;
+  width: 120px;
+  font-size: 0.65rem;
+  text-align: center;
+  color: #7f8fa3;
+  opacity: 0.8;
+}
+
+.gym-mascot.interact {
+  opacity: 0.95;
+}
+
+.gym-mascot.interact .mascot-arm.right {
+  animation: arm-wave 0.45s ease-in-out 3;
+}
+
+.gym-mascot:focus-visible {
+  outline: 1px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+@keyframes mascot-idle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes arm-left {
+  0%,
+  100% {
+    transform: rotate(18deg);
+  }
+
+  50% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes arm-right {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+
+  50% {
+    transform: rotate(-24deg);
+  }
+}
+
+@keyframes arm-wave {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+
+  50% {
+    transform: rotate(-40deg);
+  }
+}
+
+@media (max-width: 860px) {
+  .gym-mascot {
+    display: none;
+  }
+}

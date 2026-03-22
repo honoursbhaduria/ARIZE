@@ -126,7 +126,7 @@ class MusicRecommendation(models.Model):
 
 class ProgressPhoto(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='progress_photos')
-    image_url = models.URLField()
+    image_url = models.TextField() # Changed from URLField to support Base64
     note = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

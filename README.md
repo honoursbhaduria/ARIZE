@@ -24,7 +24,7 @@ ARIZE is a React + Django fitness platform with AI-assisted workout, nutrition, 
 
 ## Repository Structure
 
-- src/: React frontend
+- frontend/: React + Vite frontend
 - backend/: Django REST backend
 - fastapi_service/: optional FastAPI service
 
@@ -33,6 +33,7 @@ ARIZE is a React + Django fitness platform with AI-assisted workout, nutrition, 
 ### 1) Frontend
 
 ```bash
+cd frontend
 npm install
 cp .env.example .env
 npm run dev
@@ -151,7 +152,7 @@ Note: all routes except landing/login/register are protected in frontend routing
 
 ## Environment Variables
 
-Frontend envs (from .env.example):
+Frontend envs (from frontend/.env.example):
 
 - VITE_API_BASE_URL
 - VITE_GOOGLE_CLIENT_ID

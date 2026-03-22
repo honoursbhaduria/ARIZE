@@ -1,0 +1,4 @@
+.analytics-min { display: grid; gap: 14px; }
+.analytics-card { border-radius: 18px; padding: 22px; }
+.analytics-card h1 { color: #eef6ff; margin-bottom: 8px; }
+.analytics-card p { color: #93a5bf; }

@@ -1,0 +1,68 @@
+.bg-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.fitness-outline {
+  position: absolute;
+  border: 1px solid rgba(122, 137, 158, 0.12);
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+.fitness-outline-a {
+  width: 260px;
+  height: 90px;
+  border-radius: 44px;
+  left: 8%;
+  top: 14%;
+  transform: rotate(-14deg);
+  animation: float-a 16s ease-in-out infinite;
+}
+
+.fitness-outline-b {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  right: 12%;
+  top: 20%;
+  animation: float-b 20s ease-in-out infinite;
+}
+
+.fitness-outline-c {
+  width: 220px;
+  height: 70px;
+  border-radius: 34px;
+  right: 20%;
+  bottom: 12%;
+  transform: rotate(18deg);
+  animation: float-a 18s ease-in-out infinite;
+}
+
+@keyframes float-a {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-14deg);
+  }
+
+  50% {
+    transform: translateY(-12px) rotate(-14deg);
+  }
+}
+
+@keyframes float-b {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(-16px);
+  }
+}

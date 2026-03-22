@@ -1,0 +1,79 @@
+.ai-pipeline-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-1);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.ai-pipeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.ai-pipeline-head h3 {
+  font-size: 0.96rem;
+}
+
+.ai-pipeline-head small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.ai-pipeline-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  width: max-content;
+}
+
+.pipeline-segment {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pipeline-node {
+  min-width: 130px;
+  text-align: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  padding: 9px 10px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.pipeline-connector {
+  width: 44px;
+  height: 2px;
+  background: #344055;
+  margin: 0 4px;
+  position: relative;
+}
+
+.flow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9aa8ba;
+  position: absolute;
+  top: -2px;
+  left: 0;
+  animation: flow-move 1.6s linear infinite;
+}
+
+@keyframes flow-move {
+  from {
+    left: 0;
+    opacity: 0.4;
+  }
+
+  to {
+    left: calc(100% - 6px);
+    opacity: 1;
+  }
+}
