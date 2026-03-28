@@ -15,9 +15,9 @@ import { clearAuthSession } from '../services/api'
 
 const primaryLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/counter', label: 'Workout / Rep Counter', icon: Dumbbell },
+  { to: '/counter', label: 'Workout Coach', icon: Dumbbell },
   { to: '/chat', label: 'AI Coach (Chat)', icon: MessageSquare },
-  { to: '/nutrition', label: 'Nutrition (Food \u2192 Calories)', icon: Utensils },
+  { to: '/nutrition', label: 'Nutrition (Food → Calories)', icon: Utensils },
   { to: '/gallery', label: 'Progress Gallery', icon: Camera },
   { to: '/analytics', label: 'Progress & Streaks', icon: Flame },
   { to: '/integrations', label: 'Integrations (Wearables)', icon: Smartphone },
@@ -51,8 +51,9 @@ export default function SidebarNav() {
       <div className="sidebar-secondary">
         <Link to="/vision" className={`sidebar-link ${location.pathname === '/vision' ? 'active' : ''}`}>
           <ScanLine size={18} />
-          <span>Computer Vision</span>
+          <span>AI Body Tracking</span>
         </Link>
+
         <button
           type="button"
           className="sidebar-link"

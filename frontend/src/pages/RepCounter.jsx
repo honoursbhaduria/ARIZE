@@ -95,37 +95,83 @@ export default function RepCounter() {
     return map[mode] || map.squat
   }
 
+  const getPostureAdvice = (mode, stage, angleDeg) => {
+    const tips = {
+      squat: {
+        Down: [
+          'Keep your back straight!',
+          'Knees over toes — push them out',
+          'Drive through your heels',
+          'Core tight, chest up',
+        ],
+        Up: [
+          'Go deeper — break parallel',
+          'Lower slowly, control the eccentric',
+          'Breathe in on the way down',
+          'Keep weight in your heels',
+        ],
+      },
+      pushup: {
+        Down: [
+          'Keep elbows close to body!',
+          'Maintain a straight plank line',
+          'Don\'t let hips sag',
+          'Full range — chest to floor',
+        ],
+        Up: [
+          'Push explosively on the way up',
+          'Lock out your elbows at the top',
+          'Breathe out as you push',
+          'Shoulders back and down',
+        ],
+      },
+      bicep_curl: [
+        'Keep your elbow stationary!',
+        'Full range of motion — go all the way',
+        'Control the descent slowly',
+        'Don\'t swing your body',
+      ],
+    }
+
+    const pool = [
+      ...(tips[mode]?.[stage] || []),
+      ...(Array.isArray(tips[mode]) ? tips[mode] : []),
+      'Great form — keep it up!',
+    ]
+    return pool[Math.floor((Date.now() / 4000)) % pool.length]
+  }
+
   // Detection loop useEffect
   useEffect(() => {
     let animationId
-    
+
     const detect = () => {
       if (!isStreaming || !poseLandmarkerRef.current || !videoRef.current) return
 
       const video = videoRef.current
       if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
         lastVideoTimeRef.current = video.currentTime
-        
+
         try {
           const result = poseLandmarkerRef.current.detectForVideo(video, performance.now())
           if (result?.landmarks?.length) {
             setUserVisible(true)
             const landmarks = result.landmarks[0]
             const config = getExerciseConfig(exerciseMode)
-            
+
             let activeAngle = 180
             if (exerciseMode === 'squat') {
-               const leftVis = (landmarks[23]?.visibility ?? 0) + (landmarks[25]?.visibility ?? 0) + (landmarks[27]?.visibility ?? 0)
-               const rightVis = (landmarks[24]?.visibility ?? 0) + (landmarks[26]?.visibility ?? 0) + (landmarks[28]?.visibility ?? 0)
-               activeAngle = leftVis > rightVis 
-                 ? calculateAngle(landmarks[23], landmarks[25], landmarks[27])
-                 : calculateAngle(landmarks[24], landmarks[26], landmarks[28])
+              const leftVis = (landmarks[23]?.visibility ?? 0) + (landmarks[25]?.visibility ?? 0) + (landmarks[27]?.visibility ?? 0)
+              const rightVis = (landmarks[24]?.visibility ?? 0) + (landmarks[26]?.visibility ?? 0) + (landmarks[28]?.visibility ?? 0)
+              activeAngle = leftVis > rightVis
+                ? calculateAngle(landmarks[23], landmarks[25], landmarks[27])
+                : calculateAngle(landmarks[24], landmarks[26], landmarks[28])
             } else {
-               const leftVis = (landmarks[11]?.visibility ?? 0) + (landmarks[13]?.visibility ?? 0) + (landmarks[15]?.visibility ?? 0)
-               const rightVis = (landmarks[12]?.visibility ?? 0) + (landmarks[14]?.visibility ?? 0) + (landmarks[16]?.visibility ?? 0)
-               activeAngle = leftVis > rightVis 
-                 ? calculateAngle(landmarks[11], landmarks[13], landmarks[15])
-                 : calculateAngle(landmarks[12], landmarks[14], landmarks[16])
+              const leftVis = (landmarks[11]?.visibility ?? 0) + (landmarks[13]?.visibility ?? 0) + (landmarks[15]?.visibility ?? 0)
+              const rightVis = (landmarks[12]?.visibility ?? 0) + (landmarks[14]?.visibility ?? 0) + (landmarks[16]?.visibility ?? 0)
+              activeAngle = leftVis > rightVis
+                ? calculateAngle(landmarks[11], landmarks[13], landmarks[15])
+                : calculateAngle(landmarks[12], landmarks[14], landmarks[16])
             }
 
             const smoothed = getSmoothedAngle(activeAngle)
@@ -152,7 +198,7 @@ export default function RepCounter() {
               }
             }
             drawPoseOverlay(result)
-            setPostureAdvice(stageRef.current === 'Down' ? 'Push up!' : 'Go down!')
+            setPostureAdvice(getPostureAdvice(exerciseMode, stageRef.current, Math.round(smoothed)))
           } else {
             setUserVisible(false)
             setPostureAdvice('User not detected')
@@ -177,22 +223,22 @@ export default function RepCounter() {
     setIsStarting(true)
     setError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720, facingMode: 'user' } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720, facingMode: 'user' }
       })
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
-      
+
       if (!poseLandmarkerRef.current) {
         setIsPoseLoading(true)
         const vision = await import('@mediapipe/tasks-vision')
         const fileset = await vision.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm')
         poseLandmarkerRef.current = await vision.PoseLandmarker.createFromOptions(fileset, {
-          baseOptions: { 
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task', 
-            delegate: 'GPU' 
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task',
+            delegate: 'GPU'
           },
-          runningMode: 'VIDEO', 
+          runningMode: 'VIDEO',
           numPoses: 1
         })
         setIsPoseLoading(false)
@@ -215,14 +261,38 @@ export default function RepCounter() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
+      const exerciseName = getExerciseConfig(exerciseMode).label
       await saveWorkoutSession({
-        exercise_name: getExerciseConfig(exerciseMode).label,
+        exercise_name: exerciseName,
         reps,
         duration_minutes: Math.floor(sessionSeconds / 60),
         form_score: 95,
         calories_burned: reps * 4
       })
-      alert('Workout session synchronized!')
+
+      // Sync with Dashboard AI Workout Tasks
+      try {
+        const stored = localStorage.getItem('arize_today_workout_tasks_v1')
+        if (stored) {
+          let tasks = JSON.parse(stored)
+          let updated = false
+          tasks = tasks.map(t => {
+            if (!t.done && t.title.toLowerCase().includes(exerciseName.toLowerCase().replace('-', '')) && reps >= (t.reps || 1)) {
+              updated = true
+              return { ...t, done: true }
+            }
+            return t
+          })
+          if (updated) {
+            localStorage.setItem('arize_today_workout_tasks_v1', JSON.stringify(tasks))
+            window.dispatchEvent(new Event('arize_tasks_updated'))
+          }
+        }
+      } catch (e) {
+        console.error('Failed to sync tasks', e)
+      }
+
+      alert('Workout session synchronized! Dashboard updated.')
     } catch (e) {
       alert('Failed to save session.')
     } finally {
@@ -242,29 +312,29 @@ export default function RepCounter() {
   }, [isStreaming])
 
   return (
-    <motion.div 
+    <motion.div
       className="grid-dashboard"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
       <div style={{ gridColumn: 'span 12', marginBottom: '1rem' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Workout Counter</h1>
-        <p className="text-muted">High-precision real-time biometric tracking.</p>
+        <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Workout Coach</h1>
+        <p className="text-muted">Real-time AI-powered rep counting with posture coaching.</p>
       </div>
 
       {/* Main Viewport */}
       <div className="card" style={{ gridColumn: 'span 8', padding: 0, overflow: 'hidden', position: 'relative', background: '#000', minHeight: '540px', borderRadius: '24px' }}>
         <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
         <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transform: 'scaleX(-1)' }} />
-        
+
         {!isStreaming && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', background: 'rgba(5,5,5,0.9)', backdropFilter: 'blur(10px)' }}>
             <div style={{ padding: '2rem', background: 'var(--surface)', borderRadius: '50%', border: '1px solid var(--border)' }}>
-               <Camera size={48} strokeWidth={1} className="text-muted" />
+              <Camera size={48} strokeWidth={1} className="text-muted" />
             </div>
             <div style={{ textAlign: 'center' }}>
-               <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Camera Stream Required</h3>
-               <p className="text-muted" style={{ maxWidth: '300px' }}>Position your device to see your full body for accurate tracking.</p>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Camera Stream Required</h3>
+              <p className="text-muted" style={{ maxWidth: '300px' }}>Position your device to see your full body for accurate tracking.</p>
             </div>
             <button onClick={startCamera} className="btn-primary" style={{ height: '3.5rem', padding: '0 2.5rem', borderRadius: '12px' }}>
               {isStarting ? 'System Initializing...' : 'Activate Camera'}
@@ -282,25 +352,25 @@ export default function RepCounter() {
 
         {isStreaming && (
           <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', pointerEvents: 'none' }}>
-             <div style={{ background: 'rgba(5,5,5,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '1.25rem 2rem', borderRadius: '20px' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.1em' }}>Reps Completed</div>
-                <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1 }}>{reps}</div>
-                <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '1rem', width: '120px' }}>
-                   <div style={{ width: `${Math.min(100, (reps/targetReps)*100)}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
-                </div>
-             </div>
+            <div style={{ background: 'rgba(5,5,5,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '1.25rem 2rem', borderRadius: '20px' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.1em' }}>Reps Completed</div>
+              <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1 }}>{reps}</div>
+              <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '1rem', width: '120px' }}>
+                <div style={{ width: `${Math.min(100, (reps / targetReps) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
+              </div>
+            </div>
 
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'flex-end' }}>
-                <div style={{ background: userVisible ? 'rgba(74, 222, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)', border: `1px solid ${userVisible ? '#4ade80' : '#ef4444'}`, padding: '0.5rem 1rem', borderRadius: '99px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                   <div style={{ width: '8px', height: '8px', background: userVisible ? '#4ade80' : '#ef4444', borderRadius: '50%' }} />
-                   <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: userVisible ? '#4ade80' : '#ef4444' }}>
-                      {userVisible ? 'Vision Active' : 'User Out of View'}
-                   </span>
-                </div>
-                <div style={{ background: 'var(--accent)', color: 'var(--bg)', padding: '0.75rem 1.5rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase' }}>
-                   {postureAdvice}
-                </div>
-             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'flex-end' }}>
+              <div style={{ background: userVisible ? 'rgba(74, 222, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)', border: `1px solid ${userVisible ? '#4ade80' : '#ef4444'}`, padding: '0.5rem 1rem', borderRadius: '99px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '8px', height: '8px', background: userVisible ? '#4ade80' : '#ef4444', borderRadius: '50%' }} />
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: userVisible ? '#4ade80' : '#ef4444' }}>
+                  {userVisible ? 'Vision Active' : 'User Out of View'}
+                </span>
+              </div>
+              <div style={{ background: 'var(--accent)', color: 'var(--bg)', padding: '0.75rem 1.5rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase' }}>
+                {postureAdvice}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -309,11 +379,14 @@ export default function RepCounter() {
       <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div className="card" style={{ borderRadius: '24px' }}>
           <h3 style={{ fontSize: '1.125rem', marginBottom: '1.5rem' }}>Session Logic</h3>
+          <div style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700, marginBottom: '1rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }}>
+            💡 Coach guides you in real-time during your session
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
               <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Tracking Target</label>
-              <select 
-                value={exerciseMode} 
+              <select
+                value={exerciseMode}
                 onChange={e => { setExerciseMode(e.target.value); setReps(0); }}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               >
@@ -324,27 +397,27 @@ export default function RepCounter() {
             </div>
             <div>
               <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Daily Goal</label>
-              <input 
-                type="number" 
-                value={targetReps} 
+              <input
+                type="number"
+                value={targetReps}
                 onChange={e => setTargetReps(Number(e.target.value))}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               />
             </div>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-               {isStreaming ? (
-                 <button onClick={stopCamera} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: '3.5rem', borderRadius: '12px' }}>
-                   <Square size={18} /> End Stream
-                 </button>
-               ) : (
-                 <button onClick={startCamera} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: '3.5rem', borderRadius: '12px' }}>
-                   <Play size={18} fill="currentColor" /> Start AI
-                 </button>
-               )}
-               <button onClick={handleSave} disabled={reps === 0 || isSaving} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: '3.5rem', borderRadius: '12px' }}>
-                 <Save size={18} /> Sync Data
-               </button>
+              {isStreaming ? (
+                <button onClick={stopCamera} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: '3.5rem', borderRadius: '12px' }}>
+                  <Square size={18} /> End Stream
+                </button>
+              ) : (
+                <button onClick={startCamera} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: '3.5rem', borderRadius: '12px' }}>
+                  <Play size={18} fill="currentColor" /> Start AI
+                </button>
+              )}
+              <button onClick={handleSave} disabled={reps === 0 || isSaving} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: '3.5rem', borderRadius: '12px' }}>
+                <Save size={18} /> Sync Data
+              </button>
             </div>
             <button onClick={() => setReps(0)} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
               <RotateCcw size={12} /> Clear Current Count
@@ -358,27 +431,27 @@ export default function RepCounter() {
             Biometric Feed
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-             <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Joint Angle</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{lastAngle}°</div>
-             </div>
-             <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Session</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{Math.floor(sessionSeconds / 60)}:{String(sessionSeconds % 60).padStart(2, '0')}</div>
-             </div>
-             <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)', gridColumn: 'span 2' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                   <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Target Accuracy</div>
-                   <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.min(100, Math.round((reps/targetReps)*100))}%</span>
-                </div>
-                <div style={{ height: '6px', background: 'var(--bg)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, (reps/targetReps)*100)}%` }}
-                    style={{ height: '100%', background: 'var(--accent)', borderRadius: '3px' }} 
-                  />
-                </div>
-             </div>
+            <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Joint Angle</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{lastAngle}°</div>
+            </div>
+            <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Session</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{Math.floor(sessionSeconds / 60)}:{String(sessionSeconds % 60).padStart(2, '0')}</div>
+            </div>
+            <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)', gridColumn: 'span 2' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Target Accuracy</div>
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.min(100, Math.round((reps / targetReps) * 100))}%</span>
+              </div>
+              <div style={{ height: '6px', background: 'var(--bg)', borderRadius: '3px', overflow: 'hidden' }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, (reps / targetReps) * 100)}%` }}
+                  style={{ height: '100%', background: 'var(--accent)', borderRadius: '3px' }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

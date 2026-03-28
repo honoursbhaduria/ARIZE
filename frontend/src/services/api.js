@@ -126,14 +126,14 @@ async function request(path, options = {}, retryOnAuthFailure = true) {
     credentials: 'include',
     headers: isFormData
       ? {
-          ...authHeader,
-          ...(mergedOptions.headers || {}),
-        }
+        ...authHeader,
+        ...(mergedOptions.headers || {}),
+      }
       : {
-          'Content-Type': 'application/json',
-          ...authHeader,
-          ...(mergedOptions.headers || {}),
-        },
+        'Content-Type': 'application/json',
+        ...authHeader,
+        ...(mergedOptions.headers || {}),
+      },
     ...mergedOptions,
   })
 
@@ -386,3 +386,12 @@ export function getWorkoutRecommendation(metrics) {
     body: JSON.stringify(metrics),
   })
 }
+
+// AI Workout Plan Generation
+export function generateAIWorkoutPlan(prompt) {
+  return request('/workouts/ai-plan/', {
+    method: 'POST',
+    body: JSON.stringify({ prompt }),
+  })
+}
+

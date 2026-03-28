@@ -19,7 +19,7 @@ export default function Login() {
       setError('Please fill in all fields.')
       return
     }
-    
+
     setLoading(true)
     setError('')
 
@@ -54,6 +54,15 @@ export default function Login() {
   return (
     <div className="auth-page-root">
       <div className="auth-side-visual">
+        <video
+          className="auth-side-video"
+          src="/login-bg.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+        <div className="auth-side-overlay" />
         <div className="visual-content">
           <div className="auth-brand">
             <Dumbbell size={28} strokeWidth={3} />
@@ -102,7 +111,7 @@ export default function Login() {
                 autoComplete="current-password"
               />
             </div>
-            
+
             <button className="btn-primary" type="submit" disabled={loading} style={{ height: '3rem' }}>
               {loading ? 'Authenticating...' : 'Sign In'}
             </button>

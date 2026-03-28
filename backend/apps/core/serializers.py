@@ -34,9 +34,14 @@ class SignupSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    streak_days = serializers.SerializerMethodField()
+
     class Meta:
         model = UserProfile
         fields = ['age', 'weight', 'district', 'goal', 'diet_type', 'streak_days', 'notifications_enabled']
+
+    def get_streak_days(self, obj):
+        return 0
 
 
 class ChatSerializer(serializers.Serializer):
@@ -94,7 +99,7 @@ class RAGMemorySerializer(serializers.ModelSerializer):
         model = RAGMemoryEntry
         fields = ['id', 'source_type', 'content', 'embedding_preview', 'created_at']
 
-
+    
 class RecommendationRequestSerializer(serializers.Serializer):
     fatigue = serializers.FloatField(min_value=0, max_value=100)
     streak = serializers.IntegerField(min_value=0)

@@ -28,23 +28,32 @@
   }
 }
 
-/* Subtle grid pattern for visual side */
-.auth-side-visual::before {
-  content: '';
+/* Video background */
+.auth-side-video {
   position: absolute;
   inset: 0;
-  background-image: 
-    linear-gradient(var(--border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(circle at 2px 2px, black, transparent 80%);
-  opacity: 0.2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   z-index: 0;
+}
+
+/* Dark overlay so text stays readable */
+.auth-side-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 50%,
+    rgba(0, 0, 0, 0.65) 100%
+  );
+  z-index: 1;
 }
 
 .visual-content {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .visual-tagline {
@@ -58,8 +67,10 @@
 }
 
 .visual-footer {
+  position: relative;
+  z-index: 2;
   font-size: 0.875rem;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;

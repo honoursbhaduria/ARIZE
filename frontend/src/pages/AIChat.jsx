@@ -1,13 +1,13 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Bot, 
-  Brain, 
-  Sparkles, 
-  Send, 
-  BarChart4, 
-  Trash2, 
-  History,
+import {
+  Bot,
+  Brain,
+  Sparkles,
+  Send,
+  BarChart4,
+  Trash2,
+  Scale,
   Lightbulb,
   Zap,
   Activity,
@@ -18,17 +18,26 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
-  X
+  X,
+  Heart,
+  Database
 } from 'lucide-react'
-import { sendChatMessage, getWorkoutRecommendation, analyzeMedicalReport, getCurrentUser } from '../services/api'
+import { sendChatMessage, analyzeMedicalReport, fetchProfile, getCurrentUser } from '../services/api'
+
+function getBMICategory(bmi) {
+  if (bmi < 18.5) return { label: 'Underweight', color: '#60a5fa' }
+  if (bmi < 25) return { label: 'Normal', color: '#4ade80' }
+  if (bmi < 30) return { label: 'Overweight', color: '#fb923c' }
+  return { label: 'Obese', color: '#f87171' }
+}
 
 export default function AIChat() {
   const [chatHistory, setChatHistory] = useState([])
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [saveHistory, setSaveHistory] = useState(true)
-  const [recommendationLoading, setRecommendationLoading] = useState(false)
-  
+  const chatEndRef = useRef(null)
+
   // Medical RAG State
   const [reportFile, setReportFile] = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
@@ -36,63 +45,49 @@ export default function AIChat() {
   const [reportError, setReportError] = useState('')
   const fileInputRef = useRef(null)
 
-  const [inputs, setInputs] = useState({
-    sleep_hours: 7,
-    fatigue: 50,
-    performance: 70,
-    streak: 3,
-  })
-  const [recommendationData, setRecommendationData] = useState({
-    readiness_percent: 72,
-    mode: 'light',
-    sleep_quality: 'moderate',
-    streak_trend: 'stable',
-    action: '35 min light + mobility',
-    source: 'initial'
-  })
+  // Profile / BMI state
+  const [profileData, setProfileData] = useState(null)
+  const bmi = useMemo(() => {
+    if (!profileData?.weight) return null
+    return Math.round((profileData.weight / (1.70 * 1.70)) * 10) / 10
+  }, [profileData])
+  const bmiCategory = useMemo(() => bmi ? getBMICategory(bmi) : null, [bmi])
 
   useEffect(() => {
     const saved = localStorage.getItem('arize_ai_history')
     if (saved) {
-      try {
-        setChatHistory(JSON.parse(saved))
-      } catch (e) {}
+      try { setChatHistory(JSON.parse(saved)) } catch (e) { }
     }
-    loadRecommendation()
+    // Load profile for BMI widget
+    fetchProfile().then(p => setProfileData(p)).catch(() => { })
   }, [])
 
-  const loadRecommendation = async () => {
-    setRecommendationLoading(true)
-    try {
-      const result = await getWorkoutRecommendation(inputs)
-      setRecommendationData(result)
-    } catch (error) {}
-    finally {
-      setRecommendationLoading(false)
-    }
-  }
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatHistory])
 
   const handleReportUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    
+
     setReportFile(file)
     setReportLoading(true)
     setReportError('')
-    
+
     try {
       const result = await analyzeMedicalReport(file)
       setReportAnalysis(result)
-      
-      // Automatically add a chat message about the report
+
       const newEntry = {
         id: Date.now(),
-        question: `Analyzed medical report: ${file.name}`,
-        answer: result.summary || "I've processed your medical report. I'll now factor these health insights into our coaching sessions. What would you like to know about your personalized routine?",
+        question: `📋 Uploaded medical report: ${file.name}`,
+        answer: result.summary || "I've analyzed your medical report and saved the health insights to your profile. This data will now be used to personalize all future AI coaching responses. What would you like to know about your health?",
         source: 'medical_rag',
         timestamp: new Date().toLocaleTimeString()
       }
-      setChatHistory(prev => [...prev, newEntry])
+      const next = [...chatHistory, newEntry]
+      setChatHistory(next)
+      if (saveHistory) localStorage.setItem('arize_ai_history', JSON.stringify(next))
     } catch (err) {
       setReportError('Failed to process report. Ensure it is a valid document.')
     } finally {
@@ -117,14 +112,12 @@ export default function AIChat() {
       }
       const nextHistory = [...chatHistory, newEntry]
       setChatHistory(nextHistory)
-      if (saveHistory) {
-        localStorage.setItem('arize_ai_history', JSON.stringify(nextHistory))
-      }
+      if (saveHistory) localStorage.setItem('arize_ai_history', JSON.stringify(nextHistory))
     } catch (error) {
       const errorEntry = {
         id: Date.now(),
         question: userQ,
-        answer: 'AI service is unavailable. Please check backend settings.',
+        answer: 'AI service is temporarily unavailable. Please check your connection and try again.',
         source: 'error',
         timestamp: new Date().toLocaleTimeString()
       }
@@ -142,20 +135,21 @@ export default function AIChat() {
   }
 
   const quickPrompts = [
-    'Why am I not improving?',
-    'What should I do today?',
-    'Meal plan for muscle gain',
+    'What should I eat for muscle gain?',
+    'How can I improve my sleep?',
+    'Create a recovery plan for me',
+    'Analyze my current health status',
   ]
 
   return (
-    <motion.div 
+    <motion.div
       className="grid-dashboard"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
       <div style={{ gridColumn: 'span 12', marginBottom: '1rem' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>AI Coach</h1>
-        <p className="text-muted">Personalized intelligence factored by your health data and reports.</p>
+        <p className="text-muted">RAG-powered intelligence with memory — personalized to your health data and history.</p>
       </div>
 
       {/* Left Column: Chat */}
@@ -165,6 +159,12 @@ export default function AIChat() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <Sparkles size={18} />
               <h3 style={{ fontSize: '1.125rem' }}>Direct Consultation</h3>
+              {chatHistory.length > 0 && (
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', background: 'rgba(var(--accent-rgb, 255,255,255),0.1)', borderRadius: '99px', color: 'var(--accent)' }}>
+                  <Database size={10} style={{ display: 'inline', marginRight: 3 }} />
+                  Memory Active
+                </span>
+              )}
             </div>
             {chatHistory.length > 0 && (
               <button onClick={clearHistory} className="text-muted" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -177,7 +177,8 @@ export default function AIChat() {
             {chatHistory.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', opacity: 0.5 }}>
                 <Bot size={48} strokeWidth={1} />
-                <p>Start a conversation with your AI coach.</p>
+                <p>Your AI health doctor is ready. Ask me anything.</p>
+                <p style={{ fontSize: '0.75rem', textAlign: 'center', maxWidth: '300px' }}>I remember our previous conversations and use your health data to give personalized advice.</p>
               </div>
             ) : (
               chatHistory.map((entry) => (
@@ -187,23 +188,45 @@ export default function AIChat() {
                     <div style={{ fontSize: '0.875rem', lineHeight: 1.6 }}>{entry.question}</div>
                   </div>
                   <div style={{ display: 'flex', gap: '1rem', padding: '1.5rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', minWidth: '60px', color: 'var(--accent)' }}>AI</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', minWidth: '60px', color: 'var(--accent)' }}>
+                      {entry.source === 'medical_rag' ? '🩺 Doc' : 'AI'}
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                       <div style={{ fontSize: '0.875rem', lineHeight: 1.6 }}>{entry.answer}</div>
-                      <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', opacity: 0.5 }}>Source: {entry.source} • {entry.timestamp}</div>
+                      <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', opacity: 0.5 }}>
+                        {entry.source === 'medical_rag' ? 'Medical Intelligence' : `Source: ${entry.source}`} • {entry.timestamp}
+                      </div>
                     </div>
                   </div>
                 </div>
               ))
             )}
+            <div ref={chatEndRef} />
           </div>
+
+          {/* Quick Prompts */}
+          {chatHistory.length === 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+              {quickPrompts.map(p => (
+                <button
+                  key={p}
+                  onClick={() => setQuestion(p)}
+                  style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', border: '1px solid var(--border)', borderRadius: '99px', color: 'var(--text-secondary)', transition: 'all 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div style={{ position: 'relative' }}>
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), askAi())}
-              placeholder="Ask anything..."
+              placeholder="Ask anything about your health, workouts, nutrition..."
               style={{
                 width: '100%',
                 background: 'var(--surface-hover)',
@@ -216,7 +239,7 @@ export default function AIChat() {
                 resize: 'none'
               }}
             />
-            <button 
+            <button
               onClick={askAi}
               disabled={loading || !question.trim()}
               style={{
@@ -233,62 +256,129 @@ export default function AIChat() {
         </div>
       </div>
 
-      {/* Right Column: Knowledge & Medical RAG */}
+      {/* Right Column: BMI + Medical */}
       <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        
-        {/* Medical Report RAG Section */}
-        <div className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'linear-gradient(180deg, var(--surface) 0%, rgba(255,255,255,0.02) 100%)' }}>
+
+        {/* BMI Card (replaces Readiness Score) */}
+        <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-            <FileText size={18} style={{ color: '#ffffff' }} />
-            <h3 style={{ fontSize: '1.125rem', color: '#ffffff' }}>Medical Intelligence</h3>
+            <Scale size={18} style={{ color: 'var(--accent)' }} />
+            <h3 style={{ fontSize: '1.125rem' }}>Your BMI</h3>
           </div>
-          
-          <p style={{ fontSize: '0.815rem', color: '#ffffff', lineHeight: 1.5, marginBottom: '1.5rem' }}>
-            Upload medical reports (PDF/IMG) to factor your health history into AI coaching routines.
+          {bmi ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '3rem', fontWeight: 900, color: bmiCategory?.color, lineHeight: 1 }}>{bmi}</div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: bmiCategory?.color }}>{bmiCategory?.label}</div>
+                  <div className="text-muted" style={{ fontSize: '0.7rem' }}>kg/m²</div>
+                </div>
+              </div>
+              {/* Gradient BMI bar */}
+              <div style={{ position: 'relative', height: '8px', background: 'linear-gradient(to right, #60a5fa 0%, #4ade80 37%, #fb923c 62%, #f87171 80%)', borderRadius: '4px', marginBottom: '0.5rem' }}>
+                <div style={{
+                  position: 'absolute', top: '-4px',
+                  left: `${Math.min(Math.max(((bmi - 10) / 30) * 100, 3), 97)}%`,
+                  width: '16px', height: '16px',
+                  background: bmiCategory?.color, borderRadius: '50%',
+                  border: '2px solid var(--bg)', transform: 'translateX(-50%)'
+                }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', opacity: 0.5, marginBottom: '1rem' }}>
+                <span>10</span><span>18.5</span><span>25</span><span>30</span><span>40+</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                {[
+                  { label: 'Underweight', range: '< 18.5', color: '#60a5fa' },
+                  { label: 'Normal', range: '18.5–25', color: '#4ade80' },
+                  { label: 'Overweight', range: '25–30', color: '#fb923c' },
+                  { label: 'Obese', range: '> 30', color: '#f87171' },
+                ].map(cat => (
+                  <div key={cat.label} style={{ padding: '0.6rem', borderRadius: 'var(--radius)', background: bmiCategory?.label === cat.label ? `${cat.color}20` : 'var(--surface-hover)', border: `1px solid ${bmiCategory?.label === cat.label ? cat.color : 'transparent'}` }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: cat.color }}>{cat.label}</div>
+                    <div style={{ fontSize: '0.6rem', opacity: 0.6 }}>{cat.range}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.75rem' }}>
+                Based on {profileData?.weight}kg · 170cm
+              </div>
+            </>
+          ) : (
+            <div>
+              <div className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
+                Update your profile with weight to see your BMI health status.
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                {[
+                  { label: 'Normal', range: '18.5–25', color: '#4ade80' },
+                  { label: 'Overweight', range: '25–30', color: '#fb923c' },
+                ].map(cat => (
+                  <div key={cat.label} style={{ padding: '0.5rem', borderRadius: '4px', background: 'var(--surface-hover)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: cat.color }}>{cat.label}</span>
+                    <span className="text-muted" style={{ fontSize: '0.7rem' }}>{cat.range}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Medical Intelligence */}
+        <div className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'linear-gradient(180deg, var(--surface) 0%, rgba(255,255,255,0.02) 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <Heart size={18} style={{ color: '#f87171' }} />
+            <h3 style={{ fontSize: '1.125rem' }}>Medical Intelligence</h3>
+          </div>
+
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+            Upload your medical reports (blood tests, scans, prescriptions). The AI doctor will analyze them and use this data in all future coaching responses.
           </p>
 
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleReportUpload} 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleReportUpload}
             style={{ display: 'none' }}
             accept=".pdf,image/*"
           />
 
           {!reportFile ? (
-            <button 
+            <button
               onClick={() => fileInputRef.current?.click()}
-              style={{ 
-                width: '100%', 
-                border: '1px dashed var(--border)', 
-                padding: '1.5rem', 
-                borderRadius: 'var(--radius)', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                gap: '0.75rem',
-                background: 'var(--surface-hover)',
+              style={{
+                width: '100%',
+                border: '1px dashed rgba(248,113,113,0.4)',
+                padding: '1.25rem',
+                borderRadius: 'var(--radius)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.5rem',
+                background: 'rgba(248,113,113,0.05)',
                 cursor: 'pointer',
-                color: '#ffffff'
+                color: '#f87171',
+                transition: 'all 0.2s'
               }}
             >
-              <Upload size={20} style={{ color: '#ffffff' }} />
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Upload Report</span>
+              <Upload size={20} />
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Upload Medical Report</span>
+              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>PDF, JPG, PNG accepted</span>
             </button>
           ) : (
             <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                {reportLoading ? <Loader2 className="spinner" size={16} style={{ color: '#ffffff' }} /> : <CheckCircle2 size={16} color="#4ade80" />}
+                {reportLoading ? <Loader2 className="spinner" size={16} style={{ color: '#f87171' }} /> : <CheckCircle2 size={16} color="#4ade80" />}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#ffffff' }}>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {reportFile.name}
                   </div>
-                  <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)' }}>
-                    {reportLoading ? 'Extracting health data...' : 'Report fact-checked & synced'}
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
+                    {reportLoading ? 'Analyzing health data...' : '✓ Saved to AI memory — all future responses use this data'}
                   </div>
                 </div>
                 {!reportLoading && (
-                  <button onClick={() => { setReportFile(null); setReportAnalysis(null); }} style={{ color: '#ffffff' }}>
+                  <button onClick={() => { setReportFile(null); setReportAnalysis(null); }} className="text-muted">
                     <X size={14} />
                   </button>
                 )}
@@ -296,82 +386,40 @@ export default function AIChat() {
             </div>
           )}
 
-          <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }}>
-            <ShieldCheck size={14} style={{ color: '#ffffff' }} />
-            <span style={{ fontSize: '0.65rem', color: '#ffffff', fontWeight: 600 }}>HIPAA Compliant Data Handling</span>
+          {reportError && (
+            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: 'var(--radius)', color: '#ef4444', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertCircle size={14} /> {reportError}
+            </div>
+          )}
+
+          <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }}>
+            <ShieldCheck size={14} style={{ color: '#4ade80', flexShrink: 0 }} />
+            <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Data stored securely · Used only for your personalized AI responses</span>
           </div>
         </div>
 
-        {/* Quick Prompts */}
-        <div className="card">
-          <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem' }} className="text-muted">
-            Quick Prompts
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {quickPrompts.map(p => (
-              <button 
-                key={p} 
-                onClick={() => setQuestion(p)}
-                style={{ 
-                  textAlign: 'left', 
-                  fontSize: '0.875rem', 
-                  padding: '0.75rem', 
-                  border: '1px solid var(--border)', 
-                  borderRadius: 'var(--radius)',
-                  transition: 'background 0.2s ease',
-                  color: '#ffffff'
-                }}
-                onMouseEnter={e => e.target.style.background = 'var(--surface-hover)'}
-                onMouseLeave={e => e.target.style.background = 'transparent'}
-              >
-                {p}
-              </button>
+        {/* AI Health context indicator */}
+        <div className="card" style={{ background: 'var(--surface-hover)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <Brain size={16} className="text-muted" />
+            <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Memory Status</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[
+              { label: 'Chat History', active: chatHistory.length > 0, count: chatHistory.length },
+              { label: 'Medical Reports', active: !!reportAnalysis, count: reportFile ? 1 : 0 },
+              { label: 'Health Profile', active: !!profileData?.weight, count: profileData?.weight ? 1 : 0 },
+            ].map(item => (
+              <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', borderRadius: '4px', background: item.active ? 'rgba(var(--accent-rgb, 255,255,255),0.05)' : 'transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.active ? '#4ade80' : 'var(--border)' }} />
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{item.label}</span>
+                </div>
+                <span style={{ fontSize: '0.7rem', color: item.active ? '#4ade80' : 'var(--text-secondary)' }}>
+                  {item.active ? `${item.count} loaded` : 'Empty'}
+                </span>
+              </div>
             ))}
-          </div>
-        </div>
-
-        {/* Readiness Model */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-            <Zap size={18} className="text-muted" />
-            <h3 style={{ fontSize: '1.125rem' }}>Readiness Score</h3>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-              <div style={{ fontSize: '2.5rem', fontWeight: 700 }}>{Math.round(recommendationData.readiness_percent)}%</div>
-              <div style={{ flex: 1, height: '4px', background: 'var(--border)', borderRadius: '2px' }}>
-                <div style={{ width: `${recommendationData.readiness_percent}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)' }}>
-                <div className="text-muted" style={{ fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Intensity</div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize' }}>{recommendationData.mode}</div>
-              </div>
-              <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)' }}>
-                <div className="text-muted" style={{ fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Trend</div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize' }}>{recommendationData.streak_trend}</div>
-              </div>
-            </div>
-
-            <div style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <Lightbulb size={14} className="text-muted" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Daily Action</span>
-              </div>
-              <p style={{ fontSize: '0.875rem', lineHeight: 1.5 }}>{recommendationData.action}</p>
-            </div>
-
-            <button 
-              onClick={loadRecommendation}
-              disabled={recommendationLoading}
-              className="btn-secondary"
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-            >
-              <History size={14} /> {recommendationLoading ? 'Recalculating...' : 'Recalculate Score'}
-            </button>
           </div>
         </div>
       </div>

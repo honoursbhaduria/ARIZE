@@ -10,7 +10,7 @@ from urllib.error import URLError
 import certifi
 
 from groq import Groq
-import google.generativeai as genai
+
 
 try:
     from langchain_core.prompts import ChatPromptTemplate
@@ -40,11 +40,28 @@ except Exception:
 
 
 def get_groq_client():
-    """Get Groq client with API key from settings."""
-    api_key = os.getenv('GROQ_API_KEY', '')
+    """Get Groq client, dynamically checking .env to avoid requiring a server restart."""
+    from django.conf import settings
+    from dotenv import dotenv_values
+    import os
+    
+    api_key = getattr(settings, 'GROQ_API_KEY', '')
+    
+    # If empty or stale, check .env directly
+    if not api_key:
+        try:
+            env_vars = dotenv_values(settings.BASE_DIR / '.env')
+            api_key = env_vars.get('GROQ_API_KEY', '')
+        except Exception:
+            pass
+            
+    if not api_key:
+        api_key = os.getenv('GROQ_API_KEY', '')
+
     if api_key:
         return Groq(api_key=api_key)
     return None
+
 
 
 def pseudo_embedding(text: str):
@@ -132,88 +149,83 @@ def get_gemini_client():
 
 def recognize_food_from_image(image_data: str):
     """
-    Use Gemini Vision API to recognize food from image and extract nutrition info.
+    Use Groq Vision API to recognize food from image and extract nutrition info.
 
     Args:
         image_data: Base64 encoded image string (data URI or plain base64)
 
     Returns:
-        dict with food_name, calories, protein, carbs, fats
+        dict with food, calories, protein, carbs, fats
     """
-    genai_client = get_gemini_client()
-    if not genai_client:
+    client = get_groq_client()
+    if not client:
         return None
 
     try:
-        mime_type = 'image/jpeg'
-
-        # Handle data URI format (e.g., "data:image/png;base64,...")
+        # Ensure we have a proper data URI for the Groq multimodal API
         if image_data.startswith('data:') and ',' in image_data:
-            header, encoded_data = image_data.split(',', 1)
-            image_data = encoded_data
-            mime_match = re.search(r'data:([^;]+);base64', header)
-            if mime_match:
-                mime_type = mime_match.group(1).strip() or mime_type
+            data_uri = image_data  # already a full data URI
+        else:
+            data_uri = f'data:image/jpeg;base64,{image_data}'
 
-        # Decode base64 to bytes
-        image_bytes = base64.b64decode(image_data)
-
-        model_names = get_gemini_image_models(genai_client)
-        if not model_names:
-            return None
-
-        # Ask for strict JSON so parsing is deterministic.
-        prompt = (
-            "Identify the main food item in this image and estimate nutrition per 100g. "
-            "Return ONLY valid JSON with this exact shape: "
+        prompt_text = (
+            'Identify the main food item in this image and estimate nutrition per 100g. '
+            'Return ONLY valid JSON with this exact shape: '
             '{"food":"string","calories":number,"protein":number,"carbs":number,"fats":number}. '
-            "No markdown. No additional text."
+            'No markdown. No additional text.'
         )
 
-        last_error_message = ''
+        # Try vision-capable Groq models in order of preference
+        vision_models = [
+            'llama-3.2-90b-vision-preview',
+            'llama-3.2-11b-vision-preview',
+        ]
 
-        # Try candidate models until one successfully returns parsable nutrition output.
-        for model_name in model_names:
+        for model_name in vision_models:
             try:
-                model = genai_client.GenerativeModel(model_name)
-                response = model.generate_content([
-                    prompt,
-                    {
-                        'mime_type': mime_type,
-                        'data': image_bytes
-                    }
-                ])
-
-                if response and response.text:
-                    parsed = parse_gemini_nutrition_response(response.text)
-                    if parsed:
-                        return parsed
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {
+                            'role': 'user',
+                            'content': [
+                                {'type': 'text', 'text': prompt_text},
+                                {'type': 'image_url', 'image_url': {'url': data_uri}},
+                            ],
+                        }
+                    ],
+                    temperature=0.2,
+                    max_tokens=256,
+                )
+                raw = response.choices[0].message.content or ''
+                parsed = _parse_groq_nutrition_response(raw)
+                if parsed:
+                    return parsed
             except Exception as model_error:
-                last_error_message = str(model_error)
-                print(f"Gemini model {model_name} failed: {model_error}")
+                print(f'Groq vision model {model_name} failed: {model_error}')
+                continue
 
-        if 'quota' in last_error_message.lower() or '429' in last_error_message:
-            return {'error': 'gemini_quota_exceeded'}
-
+        # If all vision models fail, fall back to text-based lookup
+        print('All Groq vision models failed, using text nutrition lookup')
         return None
 
     except Exception as e:
-        print(f"Gemini API error: {e}")
+        print(f'Groq food recognition error: {e}')
         return None
 
 
-def parse_gemini_nutrition_response(response_text: str):
-    """Parse Gemini response to extract nutrition data."""
+def _parse_groq_nutrition_response(response_text: str):
+    """Parse Groq AI response to extract nutrition data."""
     try:
-        # 1) Try strict JSON first.
-        parsed = _parse_shopping_json(response_text)
-        if parsed and isinstance(parsed, dict):
+        # 1) Try direct JSON parse first (most common with strict prompt)
+        clean = re.sub(r'```(?:json)?', '', response_text).strip().strip('`')
+        parsed = _parse_shopping_json(clean)
+        if parsed and isinstance(parsed, dict) and parsed.get('calories'):
             food = str(parsed.get('food', 'Food Item')).strip() or 'Food Item'
             calories = int(float(parsed.get('calories', 100)))
             protein = round(float(parsed.get('protein', 5)), 1)
             carbs = round(float(parsed.get('carbs', 10)), 1)
             fats = round(float(parsed.get('fats', 5)), 1)
-
             if calories > 0:
                 return {
                     'food': food,
@@ -221,28 +233,19 @@ def parse_gemini_nutrition_response(response_text: str):
                     'protein': max(protein, 0),
                     'carbs': max(carbs, 0),
                     'fats': max(fats, 0),
-                    'source': 'gemini_vision'
+                    'source': 'groq_vision'
                 }
 
-        # 2) Fallback to pattern parsing.
+        # 2) Line-by-line fallback parsing
         lines = response_text.strip().split('\n')
-        nutrition = {
-            'food_name': 'Food Item',
-            'calories': 100,
-            'protein': 5,
-            'carbs': 10,
-            'fats': 5
-        }
-
+        nutrition = {'food': 'Food Item', 'calories': 100, 'protein': 5, 'carbs': 10, 'fats': 5}
         for line in lines:
             line_lower = line.lower()
             numbers = re.findall(r'[\d.]+', line)
-
             if numbers:
                 value = float(numbers[0])
-
                 if 'food' in line_lower and ':' in line:
-                    nutrition['food_name'] = line.split(':')[-1].strip()
+                    nutrition['food'] = line.split(':')[-1].strip()
                 elif 'calorie' in line_lower:
                     nutrition['calories'] = int(value)
                 elif 'protein' in line_lower:
@@ -252,16 +255,9 @@ def parse_gemini_nutrition_response(response_text: str):
                 elif 'fat' in line_lower:
                     nutrition['fats'] = round(value, 1)
 
-        return {
-            'food': nutrition['food_name'],
-            'calories': nutrition['calories'],
-            'protein': nutrition['protein'],
-            'carbs': nutrition['carbs'],
-            'fats': nutrition['fats'],
-            'source': 'gemini_vision'
-        }
+        return {**nutrition, 'source': 'groq_vision'}
     except Exception as e:
-        print(f"Error parsing Gemini response: {e}")
+        print(f'Groq nutrition parse error: {e}')
         return None
 
 
@@ -275,6 +271,19 @@ def build_fitness_context(user_profile: dict, recent_data: dict) -> str:
         context_parts.append(f"Current Streak: {user_profile.get('streak_days', 0)} days")
         if user_profile.get('weight'):
             context_parts.append(f"Weight: {user_profile['weight']} kg")
+        if user_profile.get('age'):
+            context_parts.append(f"Age: {user_profile['age']} years")
+        if user_profile.get('bmi'):
+            bmi = user_profile['bmi']
+            if bmi < 18.5:
+                cat = 'Underweight'
+            elif bmi < 25:
+                cat = 'Normal'
+            elif bmi < 30:
+                cat = 'Overweight'
+            else:
+                cat = 'Obese'
+            context_parts.append(f"BMI: {bmi} ({cat})")
 
     if recent_data:
         if recent_data.get('recent_workouts'):
@@ -287,6 +296,7 @@ def build_fitness_context(user_profile: dict, recent_data: dict) -> str:
             context_parts.append(f"Relevant Past Conversation:\n{recent_data['memory_context']}")
 
     return "\n".join(context_parts)
+
 
 
 def _is_langgraph_enabled() -> bool:
@@ -318,14 +328,17 @@ def _langgraph_chat_answer(message: str, context: dict, messages: list):
 
     def node_primary(state):
         text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_CHAT_PRIMARY_MODEL', 'llama-3.3-70b-versatile'))
-        return {'response': text or ''}
+        state['response'] = text or ''
+        return state
 
     def node_secondary(state):
         text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_CHAT_RETRY_MODEL', 'llama-3.1-8b-instant'))
-        return {'response': text or ''}
+        state['response'] = text or ''
+        return state
 
     def node_fallback(state):
-        return {'response': _chat_fallback_answer(state['message'], state['context'])}
+        state['response'] = _chat_fallback_answer(state['message'], state['context'])
+        return state
 
     def route_primary(state):
         return 'done' if state.get('response') else 'retry'
@@ -359,11 +372,13 @@ def _langgraph_recommendation_text(user_profile: dict, recent_metrics: dict, mes
 
     def node_primary(state):
         text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_RECO_PRIMARY_MODEL', 'llama-3.3-70b-versatile'))
-        return {'ai_text': text or ''}
+        state['ai_text'] = text or ''
+        return state
 
     def node_secondary(state):
         text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_RECO_RETRY_MODEL', 'llama-3.1-8b-instant'))
-        return {'ai_text': text or ''}
+        state['ai_text'] = text or ''
+        return state
 
     def route_primary(state):
         return 'done' if state.get('ai_text') else 'retry'
@@ -393,15 +408,16 @@ def _langgraph_recommendation_text(user_profile: dict, recent_metrics: dict, mes
 def build_rag_response(message: str, context: dict):
     """
     Build AI response using Groq API with user context.
+    Acts as a personal doctor + fitness coach.
     Falls back to rule-based response if API unavailable.
     """
-    # Build system prompt with fitness coach persona
-    system_prompt = """You are BeastTrack AI, an expert fitness and nutrition coach.
-You provide personalized, actionable advice based on the user's goals, diet preferences, and recent activity.
-Keep responses concise (2-3 sentences max), friendly, and motivating.
-Focus on practical advice they can act on today."""
+    system_prompt = """You are ARIZE AI — an expert personal fitness coach AND certified medical doctor.
+You provide personalized, actionable advice based on the user's health data, goals, diet preferences, medical history, and recent activity.
+When the user has medical data, prioritize it in your response and give doctor-level insight.
+Keep responses concise (2-4 sentences), friendly, and motivating.
+Focus on practical advice they can act on today.
+If asked about medications, symptoms, or diagnoses, respond helpfully but always recommend consulting a physician for serious concerns."""
 
-    # Build context from user data
     user_context = build_fitness_context(context.get('profile', {}), context.get('recent', {}))
 
     messages = [
@@ -416,7 +432,6 @@ Focus on practical advice they can act on today."""
 
     messages.append({"role": "user", "content": message})
 
-    # LangGraph primary path for stability (retry + fallback), then direct Groq fallback.
     response = _langgraph_chat_answer(message, context, messages) or groq_chat_completion(messages)
 
     if response:
@@ -621,8 +636,8 @@ Fats: [number]g"""
 
 def groq_calorie_lookup(query: str):
     """
-    Ask Groq for calories only (per 100g).
-    Returns a full nutrition shape with calories populated and macros zeroed.
+    Ask Groq for calories and macros (per 100g).
+    Returns a full nutrition shape with estimated amounts.
     """
     if not query or not query.strip():
         return None
@@ -632,7 +647,8 @@ def groq_calorie_lookup(query: str):
             "role": "system",
             "content": (
                 "You are a nutrition API. Return ONLY a valid JSON object with this shape: "
-                '{"calories": number}. Use calories per 100g. Do not add text.'
+                '{"calories": number, "protein": number, "carbs": number, "fats": number}. '
+                "Use values per 100g. Do not add any conversational text."
             ),
         },
         {
@@ -645,27 +661,30 @@ def groq_calorie_lookup(query: str):
     if not response:
         return None
 
+    calories, protein, carbs, fats = 0, 0, 0, 0
+    payload = None
+
     try:
-        # Try direct JSON first.
         payload = json.loads(response)
-        calories = int(float(payload.get('calories')))
     except Exception:
-        # Fallback: extract first number from text/markdown response.
         json_match = re.search(r'\{[\s\S]*\}', response)
         if json_match:
             try:
                 payload = json.loads(json_match.group(0))
-                calories = int(float(payload.get('calories')))
             except Exception:
-                payload = None
-        else:
-            payload = None
+                pass
 
-        if payload is None:
-            number_match = re.search(r'(\d+(?:\.\d+)?)', response)
-            if not number_match:
-                return None
-            calories = int(float(number_match.group(1)))
+    if isinstance(payload, dict):
+        calories = int(float(payload.get('calories', 0)))
+        protein = round(float(payload.get('protein', 0)), 1)
+        carbs = round(float(payload.get('carbs', 0)), 1)
+        fats = round(float(payload.get('fats', 0)), 1)
+    else:
+        # Absolute fallback: just extract the first number as calories
+        number_match = re.search(r'(\d+(?:\.\d+)?)', response)
+        if not number_match:
+            return None
+        calories = int(float(number_match.group(1)))
 
     if calories <= 0:
         return None
@@ -673,10 +692,10 @@ def groq_calorie_lookup(query: str):
     return {
         'food': query.title(),
         'calories': calories,
-        'protein': 0,
-        'carbs': 0,
-        'fats': 0,
-        'source': 'groq_calories'
+        'protein': protein,
+        'carbs': carbs,
+        'fats': fats,
+        'source': 'groq_macros'
     }
 
 
@@ -1451,51 +1470,61 @@ def _open_url_with_ssl(request_obj, timeout: int = 5):
             raise primary_error
 
 
-def get_gemini_image_models(genai_client):
-    """Return a prioritized list of available Gemini models for image+text generateContent."""
-    preferred = [
-        'gemini-2.0-flash',
-        'gemini-flash-latest',
-        'gemini-2.0-flash-001',
-        'gemini-2.0-flash-lite',
-        'gemini-2.0-flash-lite-001',
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-image',
-        'gemini-3.1-flash-image-preview',
-        'gemini-3-pro-image-preview',
+def groq_shopping_fallback_queries(user_message: str, user_profile: dict = None):
+    """
+    Use Groq to produce alternative shopping search queries when initial search fails.
+    Returns a list of concise queries suitable for Wikipedia search.
+    """
+    goal = ''
+    diet = ''
+    if user_profile:
+        goal = user_profile.get('goal') or user_profile.get('fitness_goal') or ''
+        diet = user_profile.get('diet_type') or user_profile.get('dietary_preference') or ''
+
+    messages = [
+        {
+            'role': 'system',
+            'content': (
+                'You are a shopping query assistant. Convert the user request into 3 short product search queries for Wikipedia. '
+                'Return ONLY a JSON object: {"queries": ["query1", "query2", "query3"]}. No extra text.'
+            ),
+        },
+        {
+            'role': 'user',
+            'content': (
+                f'User request: {user_message}\n'
+                f'Goal: {goal or "not provided"}\n'
+                f'Diet: {diet or "not provided"}\n'
+                'Example: {"queries": ["diet soda", "cola", "low-calorie beverage"]}'
+            ),
+        },
     ]
 
+    raw = groq_chat_completion(messages, model='llama-3.1-8b-instant') or ''
+    parsed = _parse_shopping_json(re.sub(r'```(?:json)?', '', raw).strip())
+    if not parsed:
+        return []
+
     try:
-        available = []
-        for model in genai_client.list_models():
-            methods = getattr(model, 'supported_generation_methods', [])
-            if 'generateContent' not in methods:
-                continue
-            name = getattr(model, 'name', '')
-            if not name:
-                continue
-            # Normalize names like models/gemini-2.5-flash -> gemini-2.5-flash
-            normalized = name.split('/')[-1]
-            available.append(normalized)
+        queries = parsed.get('queries', [])
+        if not isinstance(queries, list):
+            return []
 
-        ordered = [name for name in preferred if name in available]
-
-        # Safety fallback to any available flash/pro model if preferred list misses.
-        if not ordered:
-            ordered = [name for name in available if 'gemini' in name and ('flash' in name or 'pro' in name)]
-
-        # Deduplicate while preserving order.
+        cleaned = []
         seen = set()
-        result = []
-        for name in ordered:
-            if name in seen:
+        for query in queries:
+            if not isinstance(query, str):
                 continue
-            seen.add(name)
-            result.append(name)
-        return result
+            value = query.strip()
+            key = value.lower()
+            if not value or key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(value)
+        return cleaned[:4]
     except Exception as error:
-        print(f"Gemini model listing failed: {error}")
-        return preferred
+        print(f'Groq shopping fallback error: {error}')
+        return []
 
 
 def _parse_shopping_json(raw_text: str):
@@ -1568,56 +1597,75 @@ def _fallback_shopping_queries(user_message: str):
 
 
 def gemini_shopping_fallback_queries(user_message: str, user_profile: dict = None):
+    """Alias for groq_shopping_fallback_queries kept for backwards compatibility."""
+    return groq_shopping_fallback_queries(user_message, user_profile)
+
+
+
+
+def generate_ai_workout_plan(user_prompt: str, profile: dict = None) -> list:
     """
-    Use Gemini text model to produce alternative shopping search queries.
-    Returns a list of concise queries suitable for Wikipedia search.
+    Use Groq AI to generate a structured workout plan as a todo list.
+    Returns a list of dicts: [{id, title, details, reps, done}]
     """
-    genai_client = get_gemini_client()
-    if not genai_client:
-        return []
+    goal = (profile or {}).get('goal', 'maintenance')
+    diet = (profile or {}).get('diet_type', 'balanced')
+    weight = (profile or {}).get('weight', '')
+
+    system_prompt = (
+        "You are a certified personal trainer. Generate a structured workout plan as a JSON array. "
+        "Each item must have exactly: title (string), details (string with sets/reps/duration), reps (number). "
+        "Return ONLY a valid JSON array, no markdown, no extra text. Example: "
+        '[{"title":"Squats","details":"3 sets x 12 reps","reps":36},'
+        '{"title":"Push-ups","details":"3 sets x 15 reps","reps":45}]'
+    )
+
+    user_content = f"User goal: {goal}. Diet: {diet}."
+    if weight:
+        user_content += f" Weight: {weight}kg."
+    user_content += f" Request: {user_prompt}"
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+
+    response = groq_chat_completion(messages, model="llama-3.3-70b-versatile")
+    if not response:
+        return _default_workout_plan()
 
     try:
-        model = genai_client.GenerativeModel('gemini-1.5-flash')
+        # Strip markdown fencing if present
+        clean = re.sub(r'```(?:json)?', '', response).strip().strip('`')
+        # Extract JSON array
+        match = re.search(r'\[[\s\S]*\]', clean)
+        if match:
+            items = json.loads(match.group(0))
+            if isinstance(items, list):
+                result = []
+                for i, item in enumerate(items):
+                    if isinstance(item, dict) and item.get('title'):
+                        result.append({
+                            'id': f'ai-task-{i}',
+                            'title': str(item.get('title', '')).strip(),
+                            'details': str(item.get('details', '')).strip(),
+                            'reps': max(1, int(item.get('reps', 10))),
+                            'done': False,
+                        })
+                if result:
+                    return result
+    except Exception as e:
+        print(f"AI workout plan parse error: {e}")
 
-        goal = ''
-        diet = ''
-        if user_profile:
-            goal = user_profile.get('goal') or user_profile.get('fitness_goal') or ''
-            diet = user_profile.get('diet_type') or user_profile.get('dietary_preference') or ''
+    return _default_workout_plan()
 
-        prompt = (
-            "Convert the user's shopping request into 3 short product search queries for Wikipedia. "
-            "Return only a JSON object with key 'queries' and a list of strings. "
-            "No markdown, no extra text."
-            f"\nUser request: {user_message}"
-            f"\nGoal: {goal or 'not provided'}"
-            f"\nDiet preference: {diet or 'not provided'}"
-            "\nExample format: {\"queries\": [\"diet soda\", \"cola\", \"low-calorie beverage\"]}"
-        )
 
-        response = model.generate_content(prompt)
-        raw = response.text if response and response.text else ''
-        parsed = _parse_shopping_json(raw)
-        if not parsed:
-            return []
-
-        queries = parsed.get('queries', [])
-        if not isinstance(queries, list):
-            return []
-
-        cleaned = []
-        seen = set()
-        for query in queries:
-            if not isinstance(query, str):
-                continue
-            value = query.strip()
-            key = value.lower()
-            if not value or key in seen:
-                continue
-            seen.add(key)
-            cleaned.append(value)
-
-        return cleaned[:4]
-    except Exception as error:
-        print(f"Gemini shopping fallback error: {error}")
-        return []
+def _default_workout_plan():
+    """Return a sensible default workout plan if AI fails."""
+    return [
+        {'id': 'ai-task-0', 'title': 'Warm-Up Jog', 'details': '5 min easy pace', 'reps': 1, 'done': False},
+        {'id': 'ai-task-1', 'title': 'Squats', 'details': '3 sets x 12 reps', 'reps': 36, 'done': False},
+        {'id': 'ai-task-2', 'title': 'Push-Ups', 'details': '3 sets x 15 reps', 'reps': 45, 'done': False},
+        {'id': 'ai-task-3', 'title': 'Plank Hold', 'details': '3 sets x 30 sec', 'reps': 3, 'done': False},
+        {'id': 'ai-task-4', 'title': 'Cool-Down Stretch', 'details': '5 min full-body stretch', 'reps': 1, 'done': False},
+    ]

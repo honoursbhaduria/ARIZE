@@ -64,7 +64,7 @@ export default function ShoppingCart() {
   return (
     <div className="shopping-cart-container">
       <div className="cart-header">
-        <h2><CartIcon size={20} /> Shopping Cart ({totalItems})</h2>
+        <h2><CartIcon size={20} /> Wish List ({totalItems})</h2>
         {cartItems.length > 0 && (
           <button className="btn-secondary" onClick={handleClearCart}>
             Clear Cart
