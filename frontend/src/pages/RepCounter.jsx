@@ -18,6 +18,8 @@ export default function RepCounter() {
   const stageRef = useRef('Up')
   const lastRepAtRef = useRef(0)
   const angleHistoryRef = useRef([])
+  const repDepthReachedRef = useRef(false)
+  const repExtensionReachedRef = useRef(false)
 
   const [isStreaming, setIsStreaming] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
@@ -32,6 +34,8 @@ export default function RepCounter() {
   const [userVisible, setUserVisible] = useState(false)
   const [error, setError] = useState('')
   const [setCompleteMessage, setSetCompleteMessage] = useState('')
+  const [invalidReps, setInvalidReps] = useState(0)
+  const [isFormCorrect, setIsFormCorrect] = useState(true)
 
   const normalizedTargetReps = Math.max(1, Number(targetReps) || 1)
 
@@ -91,11 +95,69 @@ export default function RepCounter() {
 
   const getExerciseConfig = (mode) => {
     const map = {
-      squat: { label: 'Squat', downThreshold: 110, upThreshold: 160, minRepInterval: 800 },
-      pushup: { label: 'Push-up', downThreshold: 90, upThreshold: 150, minRepInterval: 700 },
-      bicep_curl: { label: 'Bicep Curl', downThreshold: 150, upThreshold: 45, minRepInterval: 600 },
+      squat: {
+        label: 'Squat',
+        downThreshold: 110,
+        upThreshold: 160,
+        minRepInterval: 800,
+        requiredDepth: 96,
+        requiredExtension: 165,
+      },
+      pushup: {
+        label: 'Push-up',
+        downThreshold: 90,
+        upThreshold: 150,
+        minRepInterval: 700,
+        requiredDepth: 82,
+        requiredExtension: 158,
+      },
+      bicep_curl: {
+        label: 'Bicep Curl',
+        downThreshold: 150,
+        upThreshold: 45,
+        minRepInterval: 600,
+        requiredDepth: 52,
+        requiredExtension: 158,
+      },
     }
     return map[mode] || map.squat
+  }
+
+  const getLiveFormFeedback = (mode, stage, angleDeg, isVisible, config, bicepState = null) => {
+    if (!isVisible) {
+      return { valid: false, message: 'Move fully into frame so joints are detected.' }
+    }
+
+    if (mode === 'bicep_curl') {
+      if (!bicepState?.bothArmsVisible) {
+        return { valid: false, message: 'Show both arms clearly for bicep curl counting.' }
+      }
+      if (bicepState?.oneArmCurledOnly) {
+        return { valid: false, message: 'One-arm curl detected. Curl both arms together.' }
+      }
+      if (stage === 'Down' && angleDeg < config.requiredExtension) {
+        return { valid: false, message: 'Open your arm fully before curling.' }
+      }
+      if (stage === 'Up' && angleDeg > config.requiredDepth) {
+        return { valid: false, message: 'Curl higher. Squeeze at the top.' }
+      }
+      return { valid: true, message: 'Good curl control. Keep elbow stable.' }
+    }
+
+    if (stage === 'Down' && angleDeg > config.requiredDepth) {
+      return {
+        valid: false,
+        message: mode === 'squat' ? 'Go lower. Hit proper squat depth.' : 'Lower more. Chest should approach floor.'
+      }
+    }
+    if (stage === 'Up' && angleDeg < config.requiredExtension) {
+      return {
+        valid: false,
+        message: mode === 'squat' ? 'Stand tall at the top to finish the rep.' : 'Lock out the top to finish the rep.'
+      }
+    }
+
+    return { valid: true, message: mode === 'squat' ? 'Depth and lockout look good.' : 'Range looks clean. Keep control.' }
   }
 
   const getPostureAdvice = (mode, stage, angleDeg) => {
@@ -163,47 +225,114 @@ export default function RepCounter() {
             const config = getExerciseConfig(exerciseMode)
 
             let activeAngle = 180
+            let bicepState = null
             if (exerciseMode === 'squat') {
               const leftVis = (landmarks[23]?.visibility ?? 0) + (landmarks[25]?.visibility ?? 0) + (landmarks[27]?.visibility ?? 0)
               const rightVis = (landmarks[24]?.visibility ?? 0) + (landmarks[26]?.visibility ?? 0) + (landmarks[28]?.visibility ?? 0)
               activeAngle = leftVis > rightVis
                 ? calculateAngle(landmarks[23], landmarks[25], landmarks[27])
                 : calculateAngle(landmarks[24], landmarks[26], landmarks[28])
-            } else {
+            } else if (exerciseMode === 'pushup') {
               const leftVis = (landmarks[11]?.visibility ?? 0) + (landmarks[13]?.visibility ?? 0) + (landmarks[15]?.visibility ?? 0)
               const rightVis = (landmarks[12]?.visibility ?? 0) + (landmarks[14]?.visibility ?? 0) + (landmarks[16]?.visibility ?? 0)
               activeAngle = leftVis > rightVis
                 ? calculateAngle(landmarks[11], landmarks[13], landmarks[15])
                 : calculateAngle(landmarks[12], landmarks[14], landmarks[16])
+            } else {
+              const leftShoulderVis = landmarks[11]?.visibility ?? 0
+              const leftElbowVis = landmarks[13]?.visibility ?? 0
+              const leftWristVis = landmarks[15]?.visibility ?? 0
+              const rightShoulderVis = landmarks[12]?.visibility ?? 0
+              const rightElbowVis = landmarks[14]?.visibility ?? 0
+              const rightWristVis = landmarks[16]?.visibility ?? 0
+
+              const leftArmVisible = leftShoulderVis > 0.55 && leftElbowVis > 0.55 && leftWristVis > 0.55
+              const rightArmVisible = rightShoulderVis > 0.55 && rightElbowVis > 0.55 && rightWristVis > 0.55
+
+              const leftAngle = calculateAngle(landmarks[11], landmarks[13], landmarks[15])
+              const rightAngle = calculateAngle(landmarks[12], landmarks[14], landmarks[16])
+
+              const bothArmsVisible = leftArmVisible && rightArmVisible
+              const bothExtended = bothArmsVisible && leftAngle > config.requiredExtension && rightAngle > config.requiredExtension
+              const bothCurled = bothArmsVisible && leftAngle < config.requiredDepth && rightAngle < config.requiredDepth
+              const oneArmCurledOnly = bothArmsVisible && (
+                (leftAngle < config.upThreshold && rightAngle >= config.upThreshold) ||
+                (rightAngle < config.upThreshold && leftAngle >= config.upThreshold)
+              )
+
+              bicepState = {
+                bothArmsVisible,
+                bothExtended,
+                bothCurled,
+                oneArmCurledOnly,
+                leftAngle,
+                rightAngle,
+              }
+
+              activeAngle = bothArmsVisible ? (leftAngle + rightAngle) / 2 : Math.max(leftAngle, rightAngle)
             }
 
             const smoothed = getSmoothedAngle(activeAngle)
             setLastAngle(Math.round(smoothed))
 
+            if (exerciseMode === 'bicep_curl') {
+              if (smoothed > config.requiredExtension) {
+                repExtensionReachedRef.current = true
+              }
+            } else if (smoothed < config.requiredDepth) {
+              repDepthReachedRef.current = true
+            }
+
             // Counting logic
             if (exerciseMode === 'bicep_curl') {
-              if (smoothed > config.downThreshold) stageRef.current = 'Down'
-              if (smoothed < config.upThreshold && stageRef.current === 'Down') {
+              if (bicepState?.bothExtended) {
+                stageRef.current = 'Down'
+                repExtensionReachedRef.current = true
+              }
+
+              const oneHandAttempt = !!bicepState?.oneArmCurledOnly
+              const validDualCurlAttempt = !!bicepState?.bothCurled
+
+              if ((oneHandAttempt || validDualCurlAttempt) && stageRef.current === 'Down') {
                 if (Date.now() - lastRepAtRef.current > config.minRepInterval) {
-                  setReps(r => Math.min(normalizedTargetReps, r + 1))
+                  if (validDualCurlAttempt && repExtensionReachedRef.current) {
+                    setReps(r => Math.min(normalizedTargetReps, r + 1))
+                    setIsFormCorrect(true)
+                  } else {
+                    setInvalidReps(r => r + 1)
+                    setIsFormCorrect(false)
+                    setPostureAdvice(oneHandAttempt ? 'Rep not counted: use both arms together.' : 'Rep not counted: fully extend both arms first.')
+                  }
                   lastRepAtRef.current = Date.now()
                   stageRef.current = 'Up'
+                  repExtensionReachedRef.current = false
                 }
               }
             } else {
               if (smoothed < config.downThreshold) stageRef.current = 'Down'
               if (smoothed > config.upThreshold && stageRef.current === 'Down') {
                 if (Date.now() - lastRepAtRef.current > config.minRepInterval) {
-                  setReps(r => Math.min(normalizedTargetReps, r + 1))
+                  if (repDepthReachedRef.current) {
+                    setReps(r => Math.min(normalizedTargetReps, r + 1))
+                    setIsFormCorrect(true)
+                  } else {
+                    setInvalidReps(r => r + 1)
+                    setIsFormCorrect(false)
+                    setPostureAdvice(exerciseMode === 'squat' ? 'Rep not counted: go lower before standing up.' : 'Rep not counted: lower deeper before pressing up.')
+                  }
                   lastRepAtRef.current = Date.now()
                   stageRef.current = 'Up'
+                  repDepthReachedRef.current = false
                 }
               }
             }
             drawPoseOverlay(result)
-            setPostureAdvice(getPostureAdvice(exerciseMode, stageRef.current, Math.round(smoothed)))
+            const liveFeedback = getLiveFormFeedback(exerciseMode, stageRef.current, Math.round(smoothed), true, config, bicepState)
+            setIsFormCorrect(liveFeedback.valid)
+            setPostureAdvice(liveFeedback.valid ? getPostureAdvice(exerciseMode, stageRef.current, Math.round(smoothed)) : liveFeedback.message)
           } else {
             setUserVisible(false)
+            setIsFormCorrect(false)
             setPostureAdvice('User not detected')
           }
         } catch (e) {
@@ -228,7 +357,11 @@ export default function RepCounter() {
     setSetCompleteMessage('')
     setSessionSeconds(0)
     setReps(0)
+    setInvalidReps(0)
+    setIsFormCorrect(true)
     stageRef.current = 'Up'
+    repDepthReachedRef.current = false
+    repExtensionReachedRef.current = false
     angleHistoryRef.current = []
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -372,6 +505,9 @@ export default function RepCounter() {
             <div style={{ background: 'rgba(5,5,5,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '1.25rem 2rem', borderRadius: '20px' }}>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.1em' }}>Reps Completed</div>
               <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1 }}>{reps}</div>
+              <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', fontWeight: 700, color: '#f87171' }}>
+                Rejected reps: {invalidReps}
+              </div>
               <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '1rem', width: '120px' }}>
                 <div style={{ width: `${Math.min(100, (reps / normalizedTargetReps) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
               </div>
@@ -384,7 +520,7 @@ export default function RepCounter() {
                   {userVisible ? 'Vision Active' : 'User Out of View'}
                 </span>
               </div>
-              <div style={{ background: 'var(--accent)', color: 'var(--bg)', padding: '0.75rem 1.5rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase' }}>
+              <div style={{ background: isFormCorrect ? 'var(--accent)' : '#ef4444', color: '#ffffff', padding: '0.75rem 1.5rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase' }}>
                 {postureAdvice}
               </div>
             </div>
@@ -409,7 +545,7 @@ export default function RepCounter() {
               <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Tracking Target</label>
               <select
                 value={exerciseMode}
-                onChange={e => { setExerciseMode(e.target.value); setReps(0); setSetCompleteMessage(''); }}
+                onChange={e => { setExerciseMode(e.target.value); setReps(0); setInvalidReps(0); setSetCompleteMessage(''); stageRef.current = 'Up'; repDepthReachedRef.current = false; repExtensionReachedRef.current = false; }}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               >
                 <option value="squat">Squats (Hip/Knee)</option>
@@ -441,7 +577,7 @@ export default function RepCounter() {
                 <Save size={18} /> Sync Data
               </button>
             </div>
-            <button onClick={() => { setReps(0); setSetCompleteMessage(''); }} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            <button onClick={() => { setReps(0); setInvalidReps(0); setSetCompleteMessage(''); stageRef.current = 'Up'; repDepthReachedRef.current = false; repExtensionReachedRef.current = false; }} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
               <RotateCcw size={12} /> Clear Current Count
             </button>
           </div>
