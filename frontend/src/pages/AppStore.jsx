@@ -76,7 +76,13 @@ export default function AppStore() {
             reader.onerror = () => reject(new Error('Could not read image file'))
             reader.readAsDataURL(file)
          })
-         const visionResult = await recognizeFood(base64)
+         let visionResult = null
+         try {
+            visionResult = await recognizeFood(base64)
+         } catch (visionError) {
+            // Continue with fallback flow even when vision API fails.
+            console.error(visionError)
+         }
          const detectedItems = visionResult?.recognition?.items || visionResult?.items || []
          let normalized = normalizeNutritionPayload(visionResult)
 

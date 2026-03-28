@@ -16,6 +16,8 @@ import Register from './pages/Register'
 import Settings from './pages/Settings'
 import OnboardingQuiz from './pages/OnboardingQuiz'
 import ProgressGallery from './pages/ProgressGallery'
+import PostureReading from './pages/PostureReading'
+import HeartHealth from './pages/HeartHealth'
 import NotFound from './pages/NotFound'
 import { isAuthenticated } from './services/api'
 import './App.css'
@@ -48,8 +50,10 @@ export default function App() {
             <Route path="/dashboard" element={withShell(<Dashboard />)} />
             <Route path="/chat" element={withShell(<AIChat />)} />
             <Route path="/vision" element={withShell(<ComputerVision />)} />
+            <Route path="/posture-reading" element={withShell(<PostureReading />)} />
             <Route path="/analytics" element={withShell(<Analytics />)} />
             <Route path="/nutrition" element={withShell(<AppStore />)} />
+            <Route path="/heart-health" element={withShell(<HeartHealth />)} />
             <Route path="/gallery" element={withShell(<ProgressGallery />)} />
             <Route path="/shopping-cart" element={withShell(<ShoppingCart />)} />
             <Route path="/integrations" element={withShell(<Integrations />)} />

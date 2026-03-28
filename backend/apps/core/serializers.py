@@ -155,6 +155,22 @@ class RecommendationRequestSerializer(serializers.Serializer):
     performance = serializers.FloatField(min_value=0, max_value=100)
 
 
+class HeartHealthPredictionSerializer(serializers.Serializer):
+    Gender = serializers.ChoiceField(choices=['Male', 'Female'])
+    Age = serializers.ChoiceField(choices=['18-34', '35-50', '51-64', '65+'])
+    History = serializers.ChoiceField(choices=['No', 'Yes'])
+    Patient = serializers.ChoiceField(choices=['No', 'Yes'])
+    TakeMedication = serializers.ChoiceField(choices=['No', 'Yes'])
+    Severity = serializers.ChoiceField(choices=['Mild', 'Moderate', 'Sever'])
+    BreathShortness = serializers.ChoiceField(choices=['No', 'Yes'])
+    VisualChanges = serializers.ChoiceField(choices=['No', 'Yes'])
+    NoseBleeding = serializers.ChoiceField(choices=['No', 'Yes'])
+    Whendiagnoused = serializers.ChoiceField(choices=['<1 Year', '1 - 5 Years', '>5 Years'])
+    Systolic = serializers.ChoiceField(choices=['100 - 110', '111 - 120', '121 - 130', '130+'])
+    Diastolic = serializers.ChoiceField(choices=['70 - 80', '81 - 90', '91 - 100', '100+'])
+    ControlledDiet = serializers.ChoiceField(choices=['No', 'Yes'])
+
+
 class WhatsAppSerializer(serializers.Serializer):
     message = serializers.CharField()
 

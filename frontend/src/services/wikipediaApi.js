@@ -194,4 +194,62 @@ export async function searchGymContent(query, limit = 10) {
   }
 }
 
+/**
+ * Fetch a fuller plain-text extract for a page.
+ */
+export async function getPageFullExtract(title, maxChars = 6000) {
+  try {
+    const params = new URLSearchParams({
+      action: 'query',
+      prop: 'extracts',
+      explaintext: '1',
+      exsectionformat: 'plain',
+      exchars: String(maxChars),
+      titles: title,
+      format: 'json',
+      origin: '*'
+    })
+
+    const response = await fetch(`${WIKIPEDIA_QUERY_API}?${params}`)
+    if (!response.ok) {
+      throw new Error(`Wikipedia API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const pages = data?.query?.pages || {}
+    const page = Object.values(pages)[0]
+    const extract = (page?.extract || '').trim()
+    return extract || null
+  } catch (error) {
+    console.error(`Failed to fetch full extract for ${title}:`, error)
+    return null
+  }
+}
+
+/**
+ * Resolve posture article data from Wikipedia using a topic name.
+ */
+export async function getPostureReadingContent(topicName) {
+  const normalized = String(topicName || '').trim()
+  const mapped = GYM_TOPICS.exercises.find(
+    (item) => item.name.toLowerCase() === normalized.toLowerCase()
+  )
+  const pageTitle = mapped?.title || normalized || 'Physical_fitness'
+
+  const summary = await getPageSummary(pageTitle)
+  const fullExtract = await getPageFullExtract(pageTitle)
+
+  if (!summary && !fullExtract) {
+    return null
+  }
+
+  return {
+    topic: mapped?.name || summary?.title || normalized || 'Posture Reading',
+    wikiTitle: summary?.title || pageTitle,
+    extract: fullExtract || summary?.extract || '',
+    thumbnail: summary?.thumbnail || null,
+    pageUrl: summary?.pageUrl || null,
+  }
+}
+
 export { GYM_TOPICS }

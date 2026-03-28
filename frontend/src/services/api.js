@@ -387,6 +387,13 @@ export function getWorkoutRecommendation(metrics) {
   })
 }
 
+export function predictHeartHealth(payload) {
+  return request('/heart-health/predict/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 // AI Workout Plan Generation
 export function generateAIWorkoutPlan(prompt) {
   return request('/workouts/ai-plan/', {

@@ -40,6 +40,7 @@ from .serializers import (
     FitnessBandSyncSerializer,
     RAGMemorySerializer,
     RecommendationRequestSerializer,
+    HeartHealthPredictionSerializer,
     WhatsAppSerializer,
     ShoppingSerializer,
     MusicSerializer,
@@ -52,6 +53,8 @@ from .services import (
     build_rag_response,
     nutrition_lookup,
     workout_recommendation,
+    predict_heart_health,
+    generate_ai_workout_plan,
     ai_workout_recommendation,
     gymnasium_workout_analysis,
     ai_workout_analysis,
@@ -827,6 +830,16 @@ class RecommendationEngineView(APIView):
             )
 
         return Response(response_payload)
+
+
+class HeartHealthPredictionView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = HeartHealthPredictionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = predict_heart_health(serializer.validated_data)
+        return Response(result)
 
 
 class WhatsAppBotView(APIView):

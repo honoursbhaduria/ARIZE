@@ -296,18 +296,51 @@ def _gemini_recognize_food(image_data: str):
             return ''
         return ''
 
-    models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro']
-    for model_name in models:
+    candidate_models = []
+    preferred_models = [
+        os.getenv('GEMINI_VISION_MODEL', '').strip(),
+        'gemini-2.5-flash-image',
+        'gemini-3.1-flash-image-preview',
+        'gemini-3-pro-image-preview',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-flash-latest',
+        'gemini-pro-latest',
+    ]
+
+    # Build candidates from currently available models so we avoid hardcoded deprecated IDs.
+    try:
+        available = []
+        for model in client.list_models():
+            methods = getattr(model, 'supported_generation_methods', []) or []
+            if 'generateContent' in methods:
+                available.append(str(getattr(model, 'name', '')).replace('models/', '').strip())
+
+        for model_name in preferred_models:
+            if model_name and model_name in available and model_name not in candidate_models:
+                candidate_models.append(model_name)
+
+        # Add remaining available models as fallback.
+        for model_name in available:
+            if model_name and model_name not in candidate_models:
+                candidate_models.append(model_name)
+    except Exception:
+        candidate_models = [m for m in preferred_models if m]
+
+    saw_quota_error = False
+    for model_name in candidate_models:
         try:
             model = client.GenerativeModel(model_name)
             # Try inline bytes first.
-            response = model.generate_content([
-                prompt_text,
-                {
-                    'mime_type': mime_type,
-                    'data': raw_bytes,
-                },
-            ])
+            response = model.generate_content(
+                [
+                    prompt_text,
+                    {
+                        'mime_type': mime_type,
+                        'data': raw_bytes,
+                    },
+                ]
+            )
             raw_text = _extract_gemini_text(response)
             parsed = _parse_vision_json_response(raw_text)
             if parsed:
@@ -316,7 +349,9 @@ def _gemini_recognize_food(image_data: str):
 
             # Fallback to PIL image object for SDK compatibility edge cases.
             pil_image = Image.open(io.BytesIO(raw_bytes))
-            response = model.generate_content([prompt_text, pil_image])
+            response = model.generate_content(
+                [prompt_text, pil_image]
+            )
             raw_text = _extract_gemini_text(response)
             parsed = _parse_vision_json_response(raw_text)
             if parsed:
@@ -325,9 +360,13 @@ def _gemini_recognize_food(image_data: str):
         except Exception as error:
             error_text = str(error).lower()
             if 'quota' in error_text or '429' in error_text or 'resource exhausted' in error_text:
-                return {'error': 'gemini_quota_exceeded'}
+                saw_quota_error = True
+                continue
             print(f'Gemini model {model_name} failed: {error}')
             continue
+
+    if saw_quota_error:
+        return {'error': 'gemini_quota_exceeded'}
 
     return None
 
@@ -367,11 +406,13 @@ def recognize_food_from_image(image_data: str):
 
         # Try vision-capable Groq models in order of preference
         vision_models = [
-            'llama-3.2-90b-vision-preview',
-            'llama-3.2-11b-vision-preview',
+            os.getenv('GROQ_VISION_MODEL', '').strip(),
+            'meta-llama/llama-4-scout-17b-16e-instruct',
         ]
 
         for model_name in vision_models:
+            if not model_name:
+                continue
             try:
                 response = client.chat.completions.create(
                     model=model_name,
@@ -1790,6 +1831,143 @@ def _fallback_shopping_queries(user_message: str):
 def gemini_shopping_fallback_queries(user_message: str, user_profile: dict = None):
     """Alias for groq_shopping_fallback_queries kept for backwards compatibility."""
     return groq_shopping_fallback_queries(user_message, user_profile)
+
+
+HEART_STAGE_MAP = {
+    0: 'NORMAL',
+    1: 'HYPERTENSION (Stage-1)',
+    2: 'HYPERTENSION (Stage-2)',
+    3: 'HYPERTENSIVE CRISIS',
+}
+
+HEART_COLOR_MAP = {
+    0: '#10B981',
+    1: '#F59E0B',
+    2: '#F97316',
+    3: '#EF4444',
+}
+
+HEART_RECOMMENDATIONS = {
+    0: {
+        'title': 'Normal Blood Pressure',
+        'description': 'Your cardiovascular risk assessment indicates normal blood pressure levels.',
+        'actions': [
+            'Maintain current healthy lifestyle',
+            'Regular physical activity (150 minutes/week)',
+            'Continue balanced, low-sodium diet',
+            'Annual blood pressure monitoring',
+            'Regular health check-ups',
+        ],
+        'priority': 'Low Risk',
+    },
+    1: {
+        'title': 'Stage 1 Hypertension',
+        'description': 'Mild elevation detected requiring lifestyle modifications and medical consultation.',
+        'actions': [
+            'Schedule appointment with healthcare provider',
+            'Implement DASH diet plan',
+            'Increase physical activity gradually',
+            'Monitor blood pressure bi-weekly',
+            'Reduce sodium intake (<2300mg/day)',
+            'Consider stress management techniques',
+        ],
+        'priority': 'Moderate Risk',
+    },
+    2: {
+        'title': 'Stage 2 Hypertension',
+        'description': 'Significant hypertension requiring immediate medical intervention and treatment.',
+        'actions': [
+            'URGENT: Consult physician within 1-2 days',
+            'Likely medication therapy required',
+            'Comprehensive cardiovascular assessment',
+            'Daily blood pressure monitoring',
+            'Strict dietary sodium restriction',
+            'Lifestyle modification counseling',
+        ],
+        'priority': 'High Risk',
+    },
+    3: {
+        'title': 'Hypertensive Crisis',
+        'description': 'CRITICAL: Dangerously elevated blood pressure requiring emergency medical care.',
+        'actions': [
+            'EMERGENCY: Seek immediate medical attention',
+            'Call emergency services if experiencing symptoms',
+            'Do not delay treatment',
+            'Monitor for stroke/heart attack signs',
+            'Prepare current medication list',
+            'Avoid physical exertion',
+        ],
+        'priority': 'EMERGENCY',
+    },
+}
+
+
+def predict_heart_health(form_data: dict) -> dict:
+    """Rule-based hypertension stage prediction compatible with frontend medical form."""
+    systolic_score = {
+        '100 - 110': 0,
+        '111 - 120': 1,
+        '121 - 130': 2,
+        '130+': 3,
+    }.get(form_data.get('Systolic'), 0)
+
+    diastolic_score = {
+        '70 - 80': 0,
+        '81 - 90': 1,
+        '91 - 100': 2,
+        '100+': 3,
+    }.get(form_data.get('Diastolic'), 0)
+
+    severity_score = {
+        'Mild': 0,
+        'Moderate': 1,
+        'Sever': 2,
+    }.get(form_data.get('Severity'), 0)
+
+    age_score = {
+        '18-34': 0,
+        '35-50': 1,
+        '51-64': 2,
+        '65+': 3,
+    }.get(form_data.get('Age'), 0)
+
+    binary_flags = [
+        form_data.get('History') == 'Yes',
+        form_data.get('Patient') == 'Yes',
+        form_data.get('TakeMedication') == 'Yes',
+        form_data.get('BreathShortness') == 'Yes',
+        form_data.get('VisualChanges') == 'Yes',
+        form_data.get('NoseBleeding') == 'Yes',
+    ]
+    symptom_burden = sum(1 for flag in binary_flags if flag)
+
+    if systolic_score >= 3 or diastolic_score >= 3:
+        stage = 3
+    elif systolic_score >= 2 or diastolic_score >= 2:
+        stage = 2
+    elif systolic_score >= 1 or diastolic_score >= 1:
+        stage = 1
+    else:
+        stage = 0
+
+    # Risk escalation based on symptom burden, severity and age.
+    escalation_score = symptom_burden + severity_score + max(0, age_score - 1)
+    if stage < 3 and escalation_score >= 6:
+        stage = min(3, stage + 1)
+    elif stage < 2 and escalation_score >= 3:
+        stage = min(2, stage + 1)
+
+    baseline_confidence = {0: 78.0, 1: 81.0, 2: 86.0, 3: 92.0}[stage]
+    confidence = min(99.0, round(baseline_confidence + min(symptom_burden * 1.3, 6.0), 1))
+
+    return {
+        'stage': HEART_STAGE_MAP[stage],
+        'stage_num': stage,
+        'color': HEART_COLOR_MAP[stage],
+        'confidence': confidence,
+        'recommendation': HEART_RECOMMENDATIONS[stage],
+        'form_data': form_data,
+    }
 
 
 

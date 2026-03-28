@@ -188,23 +188,36 @@ export default function ComputerVision() {
          </div>
 
          {/* Hero / System Status */}
-         <div className="card" style={{ gridColumn: 'span 12', background: 'var(--accent)', color: 'var(--bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+         <div
+            className="card"
+            style={{
+               gridColumn: 'span 12',
+               color: '#ffffff',
+               display: 'flex',
+               justifyContent: 'space-between',
+               alignItems: 'center',
+               backgroundImage: `linear-gradient(110deg, rgba(8, 8, 8, 0.88), rgba(8, 8, 8, 0.72)), url('/dashboard-gym-sequence.png')`,
+               backgroundSize: 'cover',
+               backgroundPosition: 'center',
+               borderColor: 'rgba(255, 255, 255, 0.14)'
+            }}
+         >
             <div>
                <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Ready for Live Tracking?</h2>
                <p style={{ fontSize: '0.875rem', opacity: 0.8, maxWidth: '600px', marginBottom: '1.5rem' }}>
                   Verify your environment and camera setup to enable 60 FPS real-time rep counting and form feedback.
                </p>
                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <Link to="/counter" className="btn-primary" style={{ background: 'var(--bg)', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Link to="/counter" className="btn-primary" style={{ background: '#ffffff', color: '#0a0a0a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                      <PlayCircle size={18} /> Launch Counter
                   </Link>
-                  <button onClick={handleCameraTest} className="btn-secondary" style={{ background: 'rgba(0,0,0,0.1)', border: '1px solid rgba(0,0,0,0.2)', color: 'var(--bg)' }}>
+                  <button onClick={handleCameraTest} className="btn-secondary" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.24)', color: '#ffffff' }}>
                      {cameraStatus === 'checking' ? 'Testing...' : 'Run Diagnostics'}
                   </button>
                </div>
             </div>
-            <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: 'var(--radius)', border: '1px solid rgba(0,0,0,0.1)', minWidth: '240px' }}>
-               <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--bg)', opacity: 0.6, marginBottom: '1rem' }}>System Status</div>
+            <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.42)', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.18)', minWidth: '240px', backdropFilter: 'blur(2px)' }}>
+               <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#ffffff', opacity: 0.75, marginBottom: '1rem' }}>System Status</div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600 }}>
                      <span>Camera</span>
@@ -405,6 +418,12 @@ export default function ComputerVision() {
                               Full body posture tracking enabled. Keep form controlled throughout the movement.
                            </p>
                         )}
+                        <Link
+                           to={`/posture-reading?topic=${encodeURIComponent(ex.name)}`}
+                           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.75rem', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--accent)' }}
+                        >
+                           Read More <ArrowRight size={13} />
+                        </Link>
                      </div>
                   )) : [
                      { name: 'Squat', desc: 'Keep back straight, chest up, and knees tracking over toes. Lower until thighs are parallel to the floor.' },
