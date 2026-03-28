@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import (
     UserProfile,
+    WomenHealthProfile,
     WorkoutSession,
     NutritionLog,
     SleepLog,
@@ -33,15 +34,62 @@ class SignupSerializer(serializers.Serializer):
         return user
 
 
+class WomenHealthProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WomenHealthProfile
+        fields = [
+            'cycle_length_days',
+            'period_duration_days',
+            'last_period_date',
+            'cycle_regularity',
+            'mood_pattern',
+            'behavior_notes',
+            'symptoms',
+            'updated_at',
+        ]
+        read_only_fields = ['updated_at']
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     streak_days = serializers.SerializerMethodField()
+    women_health_profile = WomenHealthProfileSerializer(source='user.women_health_profile', read_only=True)
+    women_health = WomenHealthProfileSerializer(write_only=True, required=False)
 
     class Meta:
         model = UserProfile
-        fields = ['age', 'weight', 'district', 'goal', 'diet_type', 'streak_days', 'notifications_enabled']
+        fields = [
+            'age',
+            'weight',
+            'district',
+            'goal',
+            'diet_type',
+            'gender',
+            'activity_level',
+            'streak_days',
+            'notifications_enabled',
+            'women_health_profile',
+            'women_health',
+        ]
 
     def get_streak_days(self, obj):
-        return 0
+        return obj.streak_days
+
+    def update(self, instance, validated_data):
+        women_health_payload = validated_data.pop('women_health', None)
+        instance = super().update(instance, validated_data)
+
+        effective_gender = validated_data.get('gender', instance.gender)
+        if effective_gender != 'female':
+            WomenHealthProfile.objects.filter(user=instance.user).delete()
+            return instance
+
+        if women_health_payload:
+            women_health_profile, _ = WomenHealthProfile.objects.get_or_create(user=instance.user)
+            for key, value in women_health_payload.items():
+                setattr(women_health_profile, key, value)
+            women_health_profile.save()
+
+        return instance
 
 
 class ChatSerializer(serializers.Serializer):

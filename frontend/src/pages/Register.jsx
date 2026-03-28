@@ -34,6 +34,15 @@ export default function Register() {
   return (
     <div className="auth-page-root">
       <div className="auth-side-visual">
+        <video
+          className="auth-side-video"
+          src="/login-bg.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+        <div className="auth-side-overlay" />
         <div className="visual-content">
           <div className="auth-brand">
             <Dumbbell size={28} strokeWidth={3} />

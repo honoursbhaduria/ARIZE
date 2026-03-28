@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { updateProfile } from '../services/api'
 
-const STEPS = [
+const BASE_STEPS = [
   {
     id: 'basics',
     title: 'Personal Metrics',
@@ -27,7 +27,17 @@ const STEPS = [
     icon: User,
     fields: [
       { key: 'age', label: 'Age', type: 'number', placeholder: '25' },
-      { key: 'weight', label: 'Weight (kg)', type: 'number', placeholder: '70' }
+      { key: 'weight', label: 'Weight (kg)', type: 'number', placeholder: '70' },
+      {
+        key: 'gender',
+        label: 'Gender',
+        type: 'select',
+        options: [
+          { value: 'male', label: 'Male' },
+          { value: 'female', label: 'Female' },
+          { value: 'other', label: 'Other' }
+        ]
+      }
     ]
   },
   {
@@ -95,6 +105,49 @@ const STEPS = [
   }
 ]
 
+const FEMALE_HEALTH_CYCLE_STEP = {
+  id: 'women_health_cycle',
+  title: "Women's Health: Cycle",
+  description: 'Track cycle basics for better recovery and load planning.',
+  icon: HeartPulse,
+  fields: [
+    { key: 'women_health.cycle_length_days', label: 'Cycle Length (days)', type: 'number', placeholder: '28' },
+    { key: 'women_health.period_duration_days', label: 'Period Duration (days)', type: 'number', placeholder: '5' },
+    { key: 'women_health.last_period_date', label: 'Last Period Date', type: 'date' },
+    {
+      key: 'women_health.cycle_regularity',
+      label: 'Cycle Regularity',
+      type: 'select',
+      options: [
+        { value: 'regular', label: 'Regular' },
+        { value: 'irregular', label: 'Irregular' }
+      ]
+    }
+  ]
+}
+
+const FEMALE_HEALTH_WELLBEING_STEP = {
+  id: 'women_health_wellbeing',
+  title: "Women's Health: Wellbeing",
+  description: 'Add mood and symptoms so coaching stays realistic and supportive.',
+  icon: HeartPulse,
+  fields: [
+    {
+      key: 'women_health.mood_pattern',
+      label: 'Behavior Pattern',
+      type: 'select',
+      options: [
+        { value: 'stable', label: 'Stable' },
+        { value: 'irritable', label: 'Irritable' },
+        { value: 'anxious', label: 'Anxious' },
+        { value: 'low_energy', label: 'Low Energy' }
+      ]
+    },
+    { key: 'women_health.symptoms', label: 'Common Symptoms', type: 'textarea', placeholder: 'e.g. cramps, bloating, headache' },
+    { key: 'women_health.behavior_notes', label: 'Additional Notes', type: 'textarea', placeholder: 'Anything else to help personalize coaching' }
+  ]
+}
+
 export default function OnboardingQuiz() {
   const navigate = useNavigate()
   const [currentStep, setCurrentStep] = useState(0)
@@ -104,8 +157,18 @@ export default function OnboardingQuiz() {
     weight: '',
     goal: 'maintenance',
     diet_type: 'vegetarian',
+    gender: 'other',
     activity_level: 'moderate',
-    district: 'Global (International)'
+    district: 'Global (International)',
+    women_health: {
+      cycle_length_days: '',
+      period_duration_days: '',
+      last_period_date: '',
+      cycle_regularity: 'regular',
+      mood_pattern: 'stable',
+      behavior_notes: '',
+      symptoms: ''
+    }
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [districtSearch, setDistrictSearch] = useState('')
@@ -146,6 +209,18 @@ export default function OnboardingQuiz() {
     return indianDistricts.filter(d => d.toLowerCase().includes(search)).slice(0, 100)
   }, [districtSearch, indianDistricts])
 
+  const steps = useMemo(() => {
+    if (formData.gender === 'female') {
+      return [
+        ...BASE_STEPS.slice(0, 3),
+        FEMALE_HEALTH_CYCLE_STEP,
+        FEMALE_HEALTH_WELLBEING_STEP,
+        ...BASE_STEPS.slice(3)
+      ]
+    }
+    return BASE_STEPS
+  }, [formData.gender])
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -156,8 +231,37 @@ export default function OnboardingQuiz() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (currentStep >= steps.length) {
+      setCurrentStep(Math.max(steps.length - 1, 0))
+    }
+  }, [currentStep, steps.length])
+
+  const getFieldValue = (key) => {
+    if (!key.includes('.')) {
+      return formData[key] ?? ''
+    }
+    const [root, child] = key.split('.')
+    return formData[root]?.[child] ?? ''
+  }
+
+  const setFieldValue = (key, value) => {
+    if (!key.includes('.')) {
+      setFormData(prev => ({ ...prev, [key]: value }))
+      return
+    }
+    const [root, child] = key.split('.')
+    setFormData(prev => ({
+      ...prev,
+      [root]: {
+        ...(prev[root] || {}),
+        [child]: value
+      }
+    }))
+  }
+
   const handleNext = () => {
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < steps.length - 1) {
       setCurrentStep(prev => prev + 1)
     } else {
       handleSubmit()
@@ -173,7 +277,11 @@ export default function OnboardingQuiz() {
   const handleSubmit = async () => {
     setIsSubmitting(true)
     try {
-      await updateProfile(formData)
+      const payload = {
+        ...formData,
+        women_health: formData.gender === 'female' ? formData.women_health : undefined
+      }
+      await updateProfile(payload)
       setIsFinished(true)
       document.body.classList.add('success-mode-active')
       setTimeout(() => {
@@ -185,9 +293,9 @@ export default function OnboardingQuiz() {
     }
   }
 
-  const step = STEPS[currentStep]
+  const step = steps[currentStep]
   const Icon = step.icon
-  const progress = ((currentStep + 1) / STEPS.length) * 100
+  const progress = ((currentStep + 1) / steps.length) * 100
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -222,6 +330,8 @@ export default function OnboardingQuiz() {
             style={{ 
               maxWidth: '460px', 
               width: '90%',
+              maxHeight: '88vh',
+              overflow: 'auto',
               background: 'rgba(15, 15, 15, 0.85)',
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255,255,255,0.1)',
@@ -238,7 +348,7 @@ export default function OnboardingQuiz() {
 
             <div style={{ marginBottom: '3rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Phase {currentStep + 1} / 5</span>
+                <span style={{ fontSize: '0.65rem', fontWeight: 800, opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Phase {currentStep + 1} / {steps.length}</span>
                 <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.round(progress)}%</span>
               </div>
               <div style={{ height: '2px', background: 'rgba(255,255,255,0.05)', borderRadius: '1px', width: '100%' }}>
@@ -343,7 +453,7 @@ export default function OnboardingQuiz() {
                                     <div 
                                       key={d}
                                       onClick={() => {
-                                        setFormData({ ...formData, district: d });
+                                        setFieldValue('district', d);
                                         setShowDropdown(false);
                                         setDistrictSearch('');
                                       }}
@@ -375,21 +485,30 @@ export default function OnboardingQuiz() {
                       ) : field.type === 'select' ? (
                         <select
                           className="auth-input"
-                          value={formData[field.key]}
-                          onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                          value={getFieldValue(field.key)}
+                          onChange={e => setFieldValue(field.key, e.target.value)}
                           style={{ height: '3.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '1rem', borderRadius: '12px' }}
                         >
                           {field.options.map(opt => (
                             <option key={opt.value} value={opt.value} style={{ background: '#000' }}>{opt.label}</option>
                           ))}
                         </select>
+                      ) : field.type === 'textarea' ? (
+                        <textarea
+                          className="auth-input"
+                          placeholder={field.placeholder}
+                          value={getFieldValue(field.key)}
+                          onChange={e => setFieldValue(field.key, e.target.value)}
+                          rows={3}
+                          style={{ minHeight: '5.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.95rem', borderRadius: '12px', padding: '0.75rem' }}
+                        />
                       ) : (
                         <input
                           type={field.type}
                           className="auth-input"
                           placeholder={field.placeholder}
-                          value={formData[field.key]}
-                          onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                          value={getFieldValue(field.key)}
+                          onChange={e => setFieldValue(field.key, e.target.value)}
                           style={{ height: '3.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '1rem', borderRadius: '12px' }}
                         />
                       )}
@@ -441,7 +560,7 @@ export default function OnboardingQuiz() {
                     borderRadius: '12px'
                   }}
                 >
-                  {isSubmitting ? 'Optimizing...' : (currentStep === STEPS.length - 1 ? 'Complete Setup' : 'Next Phase')}
+                  {isSubmitting ? 'Optimizing...' : (currentStep === steps.length - 1 ? 'Complete Setup' : 'Next Phase')}
                   {!isSubmitting && <ChevronRight size={20} />}
                 </button>
               </div>

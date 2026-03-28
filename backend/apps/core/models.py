@@ -15,6 +15,16 @@ class UserProfile(models.Model):
         ('fat_loss', 'Fat Loss'),
         ('maintenance', 'Maintenance'),
     ]
+    GENDER_CHOICES = [
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+    ]
+    ACTIVITY_LEVEL_CHOICES = [
+        ('sedentary', 'Sedentary'),
+        ('moderate', 'Moderate'),
+        ('heavy', 'Heavy'),
+    ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     age = models.PositiveIntegerField(null=True, blank=True)
@@ -22,6 +32,8 @@ class UserProfile(models.Model):
     district = models.CharField(max_length=80, default='global')
     goal = models.CharField(max_length=32, choices=GOAL_CHOICES, default='maintenance')
     diet_type = models.CharField(max_length=32, choices=DIET_CHOICES, default='vegetarian')
+    gender = models.CharField(max_length=16, choices=GENDER_CHOICES, default='other')
+    activity_level = models.CharField(max_length=16, choices=ACTIVITY_LEVEL_CHOICES, default='moderate')
     streak_days = models.PositiveIntegerField(default=0)
     notifications_enabled = models.BooleanField(default=True)
 
@@ -129,6 +141,26 @@ class ProgressPhoto(models.Model):
     image_url = models.TextField() # Changed from URLField to support Base64
     note = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class WomenHealthProfile(models.Model):
+    CYCLE_REGULARITY_CHOICES = [
+        ('regular', 'Regular'),
+        ('irregular', 'Irregular'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='women_health_profile')
+    cycle_length_days = models.PositiveIntegerField(null=True, blank=True)
+    period_duration_days = models.PositiveIntegerField(null=True, blank=True)
+    last_period_date = models.DateField(null=True, blank=True)
+    cycle_regularity = models.CharField(max_length=16, choices=CYCLE_REGULARITY_CHOICES, default='regular')
+    mood_pattern = models.CharField(max_length=120, blank=True)
+    behavior_notes = models.TextField(blank=True)
+    symptoms = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Women's health profile for {self.user.username}"
 
 
 class NotificationPreference(models.Model):

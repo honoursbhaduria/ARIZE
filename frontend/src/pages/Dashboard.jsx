@@ -22,7 +22,7 @@ import {
   Loader2,
   Scale
 } from 'lucide-react'
-import AIChainFlow from '../components/AIChainFlow'
+import BlurText from '../components/BlurText'
 import {
   fetchWorkoutSummary,
   fetchWorkoutSessions,
@@ -134,6 +134,50 @@ export default function Dashboard() {
     return workoutTasks.filter(t => t.done).reduce((sum, t) => sum + ((t.reps || 15) * 4), 0)
   }, [workoutTasks])
 
+  const metricCardBaseStyle = {
+    gridColumn: 'span 3',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1.25rem',
+    minHeight: '132px',
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundSize: 'cover',
+    backgroundRepeat: 'no-repeat',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+  }
+
+  const metricOverlay = 'linear-gradient(120deg, rgba(2, 6, 23, 0.74), rgba(2, 6, 23, 0.38))'
+
+  const metricIconWrapStyle = {
+    background: 'rgba(15, 23, 42, 0.5)',
+    backdropFilter: 'blur(2px)',
+    padding: '0.75rem',
+    borderRadius: 'var(--radius)',
+    position: 'relative',
+    zIndex: 1,
+  }
+
+  const metricContentStyle = {
+    position: 'relative',
+    zIndex: 1,
+  }
+
+  const metricLabelStyle = {
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    color: 'rgba(248, 250, 252, 0.86)',
+    letterSpacing: '0.03em',
+  }
+
+  const metricValueStyle = {
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    color: '#ffffff',
+    textShadow: '0 1px 2px rgba(0, 0, 0, 0.38)',
+  }
+
   const recentActivity = useMemo(() => workoutSessions.slice(0, 5), [workoutSessions])
 
   // BMI calculation
@@ -207,6 +251,10 @@ export default function Dashboard() {
     }
   }
 
+  const handleHelloAnimationComplete = () => {
+    console.log('Animation completed!')
+  }
+
   return (
     <motion.div
       className="grid-dashboard"
@@ -216,61 +264,88 @@ export default function Dashboard() {
       {/* Header Section */}
       <div style={{ gridColumn: 'span 12', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Welcome, {user?.username || 'User'}</h1>
+          <BlurText
+            text={`Hello, ${user?.username || 'User'}`}
+            delay={200}
+            animateBy="words"
+            direction="top"
+            onAnimationComplete={handleHelloAnimationComplete}
+            className="text-2xl mb-8"
+            style={{ fontSize: '2rem', marginBottom: '0.5rem', fontWeight: 700, lineHeight: 1.15 }}
+          />
           <p className="text-muted">Track your profile, training, and recovery in one place.</p>
         </div>
       </div>
 
       {/* Primary KPI Grid */}
-      <div className="card" style={{ gridColumn: 'span 3', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-        <div style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: 'var(--radius)' }}>
+      <div
+        className="card"
+        style={{
+          ...metricCardBaseStyle,
+          backgroundImage: `${metricOverlay}, url('/image.png')`,
+          backgroundPosition: 'center',
+        }}
+      >
+        <div style={metricIconWrapStyle}>
           <Flame size={20} />
         </div>
-        <div>
-          <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Streak</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{consistency.streak_days || 0} Days</div>
+        <div style={metricContentStyle}>
+          <div style={metricLabelStyle}>Streak</div>
+          <div style={metricValueStyle}>{consistency.streak_days || 0} Days</div>
         </div>
       </div>
 
-      <div className="card" style={{ gridColumn: 'span 3', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-        <div style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: 'var(--radius)' }}>
+      <div
+        className="card"
+        style={{
+          ...metricCardBaseStyle,
+          backgroundImage: `${metricOverlay}, url('/dashboard-gym-sequence.png')`,
+          backgroundPosition: 'center right',
+        }}
+      >
+        <div style={metricIconWrapStyle}>
           <Flame size={20} style={{ color: '#fb923c' }} />
         </div>
-        <div>
-          <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Calories Burned</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{todayBurned.toLocaleString()} kcal</div>
+        <div style={metricContentStyle}>
+          <div style={metricLabelStyle}>Calories Burned</div>
+          <div style={metricValueStyle}>{todayBurned.toLocaleString()} kcal</div>
         </div>
       </div>
 
-      <div className="card" style={{ gridColumn: 'span 3', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-        <div style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: 'var(--radius)' }}>
+      <div
+        className="card"
+        style={{
+          ...metricCardBaseStyle,
+          backgroundImage: `${metricOverlay}, url('/dashboard-calories-eaten.png')`,
+          backgroundPosition: 'right center',
+        }}
+      >
+        <div style={metricIconWrapStyle}>
           <Activity size={20} />
         </div>
-        <div>
-          <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>
-            Calories Eaten <span style={{ color: 'var(--accent)' }}>• {Math.round(todayProtein)}g PRO</span>
+        <div style={metricContentStyle}>
+          <div style={metricLabelStyle}>
+            Calories Eaten <span style={{ color: '#fde68a' }}>• {Math.round(todayProtein)}g PRO</span>
           </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{Math.round(todayCalories)} kcal</div>
+          <div style={metricValueStyle}>{Math.round(todayCalories)} kcal</div>
         </div>
       </div>
 
-      <div className="card" style={{ gridColumn: 'span 3', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-        <div style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: 'var(--radius)' }}>
+      <div
+        className="card"
+        style={{
+          ...metricCardBaseStyle,
+          backgroundImage: `${metricOverlay}, url('/dashboard-completion.png')`,
+          backgroundPosition: 'left center',
+        }}
+      >
+        <div style={metricIconWrapStyle}>
           <CheckCircle2 size={20} />
         </div>
-        <div>
-          <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Completion</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{planProgressPct}%</div>
+        <div style={metricContentStyle}>
+          <div style={metricLabelStyle}>Completion</div>
+          <div style={metricValueStyle}>{planProgressPct}%</div>
         </div>
-      </div>
-
-      {/* AI Chain Visualization */}
-      <div className="card" style={{ gridColumn: 'span 12' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-          <TrendingUp size={16} className="text-muted" />
-          <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Processing Pipeline</h3>
-        </div>
-        <AIChainFlow />
       </div>
 
       {/* Left Column */}

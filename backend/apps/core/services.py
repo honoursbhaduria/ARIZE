@@ -2,14 +2,21 @@ import hashlib
 import json
 import os
 import base64
+import io
 import re
 import ssl
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 import certifi
+from PIL import Image
 
 from groq import Groq
+
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
 
 
 try:
@@ -140,16 +147,194 @@ def groq_chat_completion(messages: list, model: str = "llama-3.3-70b-versatile")
 
 def get_gemini_client():
     """Get Gemini client and configure API key."""
-    api_key = os.getenv('GEMINI_API_KEY', '')
-    if api_key:
+    from django.conf import settings
+    from dotenv import dotenv_values
+
+    api_key = getattr(settings, 'GEMINI_API_KEY', '')
+    if not api_key:
+        try:
+            env_vars = dotenv_values(settings.BASE_DIR / '.env')
+            api_key = env_vars.get('GEMINI_API_KEY', '')
+        except Exception:
+            pass
+
+    if not api_key:
+        api_key = os.getenv('GEMINI_API_KEY', '')
+
+    if not api_key or genai is None:
+        return None
+
+    try:
         genai.configure(api_key=api_key)
         return genai
+    except Exception:
+        return None
+
+
+def _extract_image_parts(image_data: str):
+    """Extract mime type and raw bytes from base64 image input."""
+    if not image_data:
+        return None, None
+
+    try:
+        mime_type = 'image/jpeg'
+        raw_base64 = image_data
+
+        if image_data.startswith('data:') and ',' in image_data:
+            header, raw_base64 = image_data.split(',', 1)
+            if ';' in header:
+                mime_type = header.split(';', 1)[0].replace('data:', '').strip() or 'image/jpeg'
+
+        raw_bytes = base64.b64decode(raw_base64)
+        return mime_type, raw_bytes
+    except Exception:
+        return None, None
+
+
+def _normalize_vision_payload(payload: dict):
+    """Normalize vision model JSON to app nutrition shape."""
+    if not isinstance(payload, dict):
+        return None
+
+    items = payload.get('items') if isinstance(payload.get('items'), list) else []
+    summary = payload.get('summary') if isinstance(payload.get('summary'), dict) else payload
+
+    calories = int(float(summary.get('calories', 0) or 0))
+    protein = float(summary.get('protein', summary.get('protein_g', 0) or 0))
+    carbs = float(summary.get('carbs', summary.get('carbohydrates', 0) or 0))
+    fats = float(summary.get('fats', summary.get('fat', 0) or 0))
+    food = str(summary.get('food', summary.get('food_name', summary.get('detected_food', 'Food Item')))).strip() or 'Food Item'
+
+    normalized_items = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get('name', '')).strip()
+        if not name:
+            continue
+        normalized_items.append(
+            {
+                'name': name,
+                'protein_per_100g': round(float(item.get('protein_per_100g', 0) or 0), 1),
+                'estimated_portion_g': round(float(item.get('estimated_portion_g', 0) or 0), 1),
+                'estimated_protein_g': round(float(item.get('estimated_protein_g', 0) or 0), 1),
+            }
+        )
+
+    # If summary is sparse but itemized proteins exist, compute a usable protein total.
+    if protein <= 0 and normalized_items:
+        protein = round(sum(float(item.get('estimated_protein_g', 0) or 0) for item in normalized_items), 1)
+
+    if calories <= 0 and protein <= 0 and carbs <= 0 and fats <= 0 and not normalized_items:
+        return None
+
+    return {
+        'food': food,
+        'calories': max(calories, 0),
+        'protein': round(max(protein, 0), 1),
+        'carbs': round(max(carbs, 0), 1),
+        'fats': round(max(fats, 0), 1),
+        'items': normalized_items,
+    }
+
+
+def _parse_vision_json_response(response_text: str):
+    """Parse JSON output from Gemini/Groq vision models."""
+    if not response_text:
+        return None
+
+    cleaned = re.sub(r'```(?:json)?', '', response_text).strip().strip('`')
+
+    parsed = _parse_shopping_json(cleaned)
+    normalized = _normalize_vision_payload(parsed) if parsed else None
+    if normalized:
+        return normalized
+
+    try:
+        json_match = re.search(r'\{[\s\S]*\}', cleaned)
+        if json_match:
+            parsed = json.loads(json_match.group(0))
+            return _normalize_vision_payload(parsed)
+    except Exception:
+        return None
+
+    return None
+
+
+def _gemini_recognize_food(image_data: str):
+    """Use Gemini vision model for food recognition and protein-per-item output."""
+    client = get_gemini_client()
+    if not client:
+        return None
+
+    mime_type, raw_bytes = _extract_image_parts(image_data)
+    if not mime_type or not raw_bytes:
+        return None
+
+    prompt_text = (
+        'You are a nutrition analyst. Identify visible food products/items in this image. '
+        'Return ONLY valid JSON with this exact schema: '
+        '{"items":[{"name":"string","protein_per_100g":number,"estimated_portion_g":number,"estimated_protein_g":number}],'
+        '"summary":{"food":"string","calories":number,"protein":number,"carbs":number,"fats":number}}. '
+        'Use standard nutrition reference values for protein_per_100g. No markdown. No extra text.'
+    )
+
+    def _extract_gemini_text(response):
+        text = getattr(response, 'text', '') or ''
+        if text.strip():
+            return text
+
+        try:
+            candidates = getattr(response, 'candidates', []) or []
+            for candidate in candidates:
+                content = getattr(candidate, 'content', None)
+                parts = getattr(content, 'parts', []) if content else []
+                chunk_text = ''.join(getattr(part, 'text', '') for part in parts if getattr(part, 'text', ''))
+                if chunk_text.strip():
+                    return chunk_text
+        except Exception:
+            return ''
+        return ''
+
+    models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro']
+    for model_name in models:
+        try:
+            model = client.GenerativeModel(model_name)
+            # Try inline bytes first.
+            response = model.generate_content([
+                prompt_text,
+                {
+                    'mime_type': mime_type,
+                    'data': raw_bytes,
+                },
+            ])
+            raw_text = _extract_gemini_text(response)
+            parsed = _parse_vision_json_response(raw_text)
+            if parsed:
+                parsed['source'] = 'gemini_vision'
+                return parsed
+
+            # Fallback to PIL image object for SDK compatibility edge cases.
+            pil_image = Image.open(io.BytesIO(raw_bytes))
+            response = model.generate_content([prompt_text, pil_image])
+            raw_text = _extract_gemini_text(response)
+            parsed = _parse_vision_json_response(raw_text)
+            if parsed:
+                parsed['source'] = 'gemini_vision'
+                return parsed
+        except Exception as error:
+            error_text = str(error).lower()
+            if 'quota' in error_text or '429' in error_text or 'resource exhausted' in error_text:
+                return {'error': 'gemini_quota_exceeded'}
+            print(f'Gemini model {model_name} failed: {error}')
+            continue
+
     return None
 
 
 def recognize_food_from_image(image_data: str):
     """
-    Use Groq Vision API to recognize food from image and extract nutrition info.
+    Use Gemini vision (with Groq fallback) to recognize food and extract nutrition.
 
     Args:
         image_data: Base64 encoded image string (data URI or plain base64)
@@ -157,6 +342,10 @@ def recognize_food_from_image(image_data: str):
     Returns:
         dict with food, calories, protein, carbs, fats
     """
+    gemini_result = _gemini_recognize_food(image_data)
+    if gemini_result:
+        return gemini_result
+
     client = get_groq_client()
     if not client:
         return None
@@ -169,10 +358,11 @@ def recognize_food_from_image(image_data: str):
             data_uri = f'data:image/jpeg;base64,{image_data}'
 
         prompt_text = (
-            'Identify the main food item in this image and estimate nutrition per 100g. '
-            'Return ONLY valid JSON with this exact shape: '
-            '{"food":"string","calories":number,"protein":number,"carbs":number,"fats":number}. '
-            'No markdown. No additional text.'
+            'Identify visible food in this image and estimate nutrition. '
+            'Return ONLY valid JSON with this exact schema: '
+            '{"items":[{"name":"string","protein_per_100g":number,"estimated_portion_g":number,"estimated_protein_g":number}],'
+            '"summary":{"food":"string","calories":number,"protein":number,"carbs":number,"fats":number}}. '
+            'No markdown. No extra text.'
         )
 
         # Try vision-capable Groq models in order of preference
@@ -198,8 +388,9 @@ def recognize_food_from_image(image_data: str):
                     max_tokens=256,
                 )
                 raw = response.choices[0].message.content or ''
-                parsed = _parse_groq_nutrition_response(raw)
+                parsed = _parse_vision_json_response(raw)
                 if parsed:
+                    parsed['source'] = 'groq_vision'
                     return parsed
             except Exception as model_error:
                 print(f'Groq vision model {model_name} failed: {model_error}')

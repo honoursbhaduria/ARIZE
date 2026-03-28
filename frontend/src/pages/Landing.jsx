@@ -6,10 +6,18 @@ import './Landing.css'
 export default function Landing() {
   return (
     <div className="landing-root">
+      <video
+        className="landing-video"
+        src="/hero-video.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+      />
       <div className="landing-overlay" />
-      
+
       <main className="landing-content">
-        <motion.div 
+        <motion.div
           className="landing-badge"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -19,7 +27,7 @@ export default function Landing() {
           <span>V2.0 BIOMETRIC INTELLIGENCE</span>
         </motion.div>
 
-        <motion.h1 
+        <motion.h1
           className="landing-title"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -28,7 +36,7 @@ export default function Landing() {
           ARIZE <span className="text-outline">Overview</span>
         </motion.h1>
 
-        <motion.p 
+        <motion.p
           className="landing-subtitle"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -37,7 +45,7 @@ export default function Landing() {
           Modern dark fitness intelligence hub with<br />adaptive coaching and posture vision.
         </motion.p>
 
-        <motion.div 
+        <motion.div
           className="landing-actions-hero"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -53,7 +61,7 @@ export default function Landing() {
           </Link>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           className="landing-footer-stats"
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.5 }}

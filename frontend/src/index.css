@@ -215,6 +215,26 @@ body.music-playing-active {
   transition: border-color 1s ease;
 }
 
+/* FEMALE THEME MODE */
+body.female-theme-active {
+  --accent: #ff6fae;
+  --surface-hover: #171017;
+  --border: #2a1a24;
+}
+
+body.female-theme-active .card {
+  border-color: rgba(255, 111, 174, 0.22);
+}
+
+body.female-theme-active .sidebar-link.active {
+  background: rgba(255, 111, 174, 0.1);
+}
+
+body.female-theme-active .top-bar,
+body.female-theme-active .sidebar-nav {
+  background: #070507;
+}
+
 body.music-playing-active :root {
   animation: spectrum-shift 8s infinite alternate ease-in-out;
 }

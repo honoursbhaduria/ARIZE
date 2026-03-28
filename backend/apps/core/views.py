@@ -413,14 +413,15 @@ class FoodRecognitionView(APIView):
                         'protein': gemini_result['protein'],
                         'carbs': gemini_result['carbs'],
                         'fats': gemini_result['fats'],
-                        'source': 'gemini_vision'
+                        'items': gemini_result.get('items', []),
+                        'source': gemini_result.get('source', 'vision_ai')
                     },
                     'saved': NutritionLogSerializer(nutrition).data if nutrition else None
                 })
 
             return Response(
                 {
-                    'detail': 'Image analysis failed. Gemini could not detect food nutrition from this image. Please try a clearer food image.'
+                    'detail': 'Image analysis failed. We could not detect reliable food nutrition from this image. Please try a clearer food image with visible food items.'
                 },
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )

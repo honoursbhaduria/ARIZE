@@ -12,6 +12,7 @@ from .models import (
 	MusicRecommendation,
 	ProgressPhoto,
 	NotificationPreference,
+	WomenHealthProfile,
 )
 
 
@@ -27,3 +28,4 @@ admin.site.register(ShoppingSuggestion)
 admin.site.register(MusicRecommendation)
 admin.site.register(ProgressPhoto)
 admin.site.register(NotificationPreference)
+admin.site.register(WomenHealthProfile)

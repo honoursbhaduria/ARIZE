@@ -31,6 +31,9 @@ export default function RepCounter() {
   const [postureAdvice, setPostureAdvice] = useState('Position your body')
   const [userVisible, setUserVisible] = useState(false)
   const [error, setError] = useState('')
+  const [setCompleteMessage, setSetCompleteMessage] = useState('')
+
+  const normalizedTargetReps = Math.max(1, Number(targetReps) || 1)
 
   const calculateAngle = (pointA, pointB, pointC) => {
     if (!pointA || !pointB || !pointC) return 180
@@ -182,7 +185,7 @@ export default function RepCounter() {
               if (smoothed > config.downThreshold) stageRef.current = 'Down'
               if (smoothed < config.upThreshold && stageRef.current === 'Down') {
                 if (Date.now() - lastRepAtRef.current > config.minRepInterval) {
-                  setReps(r => r + 1)
+                  setReps(r => Math.min(normalizedTargetReps, r + 1))
                   lastRepAtRef.current = Date.now()
                   stageRef.current = 'Up'
                 }
@@ -191,7 +194,7 @@ export default function RepCounter() {
               if (smoothed < config.downThreshold) stageRef.current = 'Down'
               if (smoothed > config.upThreshold && stageRef.current === 'Down') {
                 if (Date.now() - lastRepAtRef.current > config.minRepInterval) {
-                  setReps(r => r + 1)
+                  setReps(r => Math.min(normalizedTargetReps, r + 1))
                   lastRepAtRef.current = Date.now()
                   stageRef.current = 'Up'
                 }
@@ -217,11 +220,16 @@ export default function RepCounter() {
     return () => {
       if (animationId) cancelAnimationFrame(animationId)
     }
-  }, [isStreaming, exerciseMode])
+  }, [isStreaming, exerciseMode, normalizedTargetReps])
 
   const startCamera = async () => {
     setIsStarting(true)
     setError('')
+    setSetCompleteMessage('')
+    setSessionSeconds(0)
+    setReps(0)
+    stageRef.current = 'Up'
+    angleHistoryRef.current = []
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720, facingMode: 'user' }
@@ -257,6 +265,15 @@ export default function RepCounter() {
     setIsStreaming(false)
     setUserVisible(false)
   }
+
+  useEffect(() => {
+    if (!isStreaming) return
+    if (reps < normalizedTargetReps) return
+
+    stopCamera()
+    setPostureAdvice(`Set complete! ${normalizedTargetReps} reps done.`)
+    setSetCompleteMessage(`Set complete! You reached ${normalizedTargetReps} reps.`)
+  }, [isStreaming, reps, normalizedTargetReps])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -356,7 +373,7 @@ export default function RepCounter() {
               <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.1em' }}>Reps Completed</div>
               <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1 }}>{reps}</div>
               <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '1rem', width: '120px' }}>
-                <div style={{ width: `${Math.min(100, (reps / targetReps) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
+                <div style={{ width: `${Math.min(100, (reps / normalizedTargetReps) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
               </div>
             </div>
 
@@ -383,11 +400,16 @@ export default function RepCounter() {
             💡 Coach guides you in real-time during your session
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {setCompleteMessage && (
+              <div style={{ fontSize: '0.75rem', color: '#4ade80', fontWeight: 700, padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(74,222,128,0.45)', background: 'rgba(74,222,128,0.12)' }}>
+                {setCompleteMessage}
+              </div>
+            )}
             <div>
               <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Tracking Target</label>
               <select
                 value={exerciseMode}
-                onChange={e => { setExerciseMode(e.target.value); setReps(0); }}
+                onChange={e => { setExerciseMode(e.target.value); setReps(0); setSetCompleteMessage(''); }}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               >
                 <option value="squat">Squats (Hip/Knee)</option>
@@ -400,7 +422,7 @@ export default function RepCounter() {
               <input
                 type="number"
                 value={targetReps}
-                onChange={e => setTargetReps(Number(e.target.value))}
+                onChange={e => setTargetReps(Math.max(1, Number(e.target.value) || 1))}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               />
             </div>
@@ -419,7 +441,7 @@ export default function RepCounter() {
                 <Save size={18} /> Sync Data
               </button>
             </div>
-            <button onClick={() => setReps(0)} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            <button onClick={() => { setReps(0); setSetCompleteMessage(''); }} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
               <RotateCcw size={12} /> Clear Current Count
             </button>
           </div>
@@ -442,12 +464,12 @@ export default function RepCounter() {
             <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)', gridColumn: 'span 2' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                 <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Target Accuracy</div>
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.min(100, Math.round((reps / targetReps) * 100))}%</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.min(100, Math.round((reps / normalizedTargetReps) * 100))}%</span>
               </div>
               <div style={{ height: '6px', background: 'var(--bg)', borderRadius: '3px', overflow: 'hidden' }}>
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, (reps / targetReps) * 100)}%` }}
+                  animate={{ width: `${Math.min(100, (reps / normalizedTargetReps) * 100)}%` }}
                   style={{ height: '100%', background: 'var(--accent)', borderRadius: '3px' }}
                 />
               </div>
