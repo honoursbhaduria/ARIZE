@@ -136,6 +136,19 @@ SIMPLE_JWT = {
 
 FASTAPI_SERVICE_URL = os.getenv('FASTAPI_SERVICE_URL', 'http://localhost:9000')
 
+# Google Fit OAuth (backend integration)
+GOOGLE_FIT_CLIENT_ID = os.getenv('GOOGLE_FIT_CLIENT_ID', '')
+GOOGLE_FIT_CLIENT_SECRET = os.getenv('GOOGLE_FIT_CLIENT_SECRET', '')
+GOOGLE_FIT_REDIRECT_URI = os.getenv('GOOGLE_FIT_REDIRECT_URI', '')
+GOOGLE_FIT_SCOPES = [
+    scope.strip()
+    for scope in os.getenv(
+        'GOOGLE_FIT_SCOPES',
+        'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.heart_rate.read',
+    ).split()
+    if scope.strip()
+]
+
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = os.getenv('DJANGO_SECURE_SSL_REDIRECT', '1') == '1'

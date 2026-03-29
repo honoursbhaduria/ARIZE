@@ -16,6 +16,7 @@ import {
   updateNotificationPreferences,
   uploadProgressPhoto 
 } from '../services/api'
+import { logActivity } from '../services/activityFeed'
 
 export default function Settings() {
   const [profile, setProfile] = useState({ age: '', weight: '', district: 'global', goal: 'maintenance', diet_type: 'vegetarian' })
@@ -44,6 +45,16 @@ export default function Settings() {
     try {
       await updateProfile(profile)
       showSuccess('Profile updated')
+         logActivity({
+            source: 'Settings',
+            action: 'Profile updated',
+            details: `Goal: ${profile.goal}, diet: ${profile.diet_type}, district: ${profile.district}`,
+            meta: {
+               goal: profile.goal,
+               diet_type: profile.diet_type,
+               district: profile.district,
+            }
+         })
     } catch (e) {}
     finally { setSaving(false) }
   }
@@ -53,6 +64,15 @@ export default function Settings() {
     try {
       await updateNotificationPreferences(prefs)
       showSuccess('Preferences saved')
+         const enabled = Object.entries(prefs)
+            .filter(([, value]) => !!value)
+            .map(([key]) => key)
+         logActivity({
+            source: 'Settings',
+            action: 'Notification preferences updated',
+            details: enabled.length ? `Enabled: ${enabled.join(', ')}` : 'All reminders turned off.',
+            meta: { enabled }
+         })
     } catch (e) {}
     finally { setSaving(false) }
   }

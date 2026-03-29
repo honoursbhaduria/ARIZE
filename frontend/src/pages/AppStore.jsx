@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Camera, Search, ShoppingCart, Utensils, Info } from 'lucide-react'
 import { fetchFoodEstimate, fetchFoodEstimateGroq, recognizeFood } from '../services/api'
 import ShoppingChat from '../components/ShoppingChat'
+import { logActivity } from '../services/activityFeed'
 
 function normalizeNutritionPayload(raw) {
    const source = raw?.recognition || raw?.result || raw || {}
@@ -52,6 +53,15 @@ export default function AppStore() {
          // Try Groq endpoint first for richer nutrition data
          const result = await fetchFoodEstimateGroq(foodQuery).catch(() => fetchFoodEstimate(foodQuery))
          setFoodResult(result)
+         const normalized = normalizeNutritionPayload(result)
+         if (normalized.calories > 0) {
+            logActivity({
+               source: 'Nutrition & Shopping',
+               action: 'Nutrition search completed',
+               details: `${normalized.food || foodQuery}: ${normalized.calories} kcal, ${normalized.protein}g protein.`,
+               meta: normalized,
+            })
+         }
       } catch (error) {
          console.error(error)
          setFoodError(error?.message || 'Unable to calculate nutrition right now. Try another food query.')
@@ -126,6 +136,12 @@ export default function AppStore() {
                fats: normalized.fat,
                items: detectedItems,
             },
+         })
+         logActivity({
+            source: 'Nutrition & Shopping',
+            action: 'Food image analyzed',
+            details: `${normalized.food || 'Food item'}: ${normalized.calories} kcal, ${normalized.protein}g protein.`,
+            meta: normalized,
          })
       } catch (error) {
          console.error(error)

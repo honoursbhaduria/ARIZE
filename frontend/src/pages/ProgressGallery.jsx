@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { fetchProgressPhotos, uploadProgressPhoto } from '../services/api'
+import { logActivity } from '../services/activityFeed'
 
 export default function ProgressGallery() {
   const [photos, setPhotos] = useState([])
@@ -73,6 +74,13 @@ export default function ProgressGallery() {
       await uploadProgressPhoto({
         image_url: base64Data, // Sending base64 as URL
         note: note
+      })
+
+      logActivity({
+        source: 'Progress Gallery',
+        action: 'Photo uploaded',
+        details: note ? `Entry added: ${note}` : 'New progress photo added.',
+        meta: { note }
       })
       
       setFile(null)

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Send, Loader, ShoppingCart } from 'lucide-react'
 import { shoppingChat, addToCart } from '../services/api'
 import ShoppingProductCard from './ShoppingProductCard'
+import { logActivity } from '../services/activityFeed'
 import '../styles/ShoppingChat.css'
 
 export default function ShoppingChat() {
@@ -71,6 +72,12 @@ export default function ShoppingChat() {
     try {
       await addToCart(productData)
       setStatusMessage('Item added to cart.')
+      logActivity({
+        source: 'Nutrition & Shopping',
+        action: 'Item added to cart',
+        details: `${productData.product_name} x${productData.quantity}`,
+        meta: { productName: productData.product_name, quantity: productData.quantity }
+      })
     } catch (err) {
       setError(err.message || 'Failed to add to cart')
     }

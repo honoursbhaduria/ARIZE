@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, RotateCcw, Save, Play, Square, Activity, Target, Clock, Zap, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { Camera, RotateCcw, Save, Play, Square, AlertCircle, Loader2 } from 'lucide-react'
 import { saveWorkoutSession } from '../services/api'
+import { logActivity } from '../services/activityFeed'
 
 const POSE_CONNECTIONS = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
@@ -15,11 +16,15 @@ export default function RepCounter() {
   const streamRef = useRef(null)
   const poseLandmarkerRef = useRef(null)
   const lastVideoTimeRef = useRef(-1)
+
   const stageRef = useRef('Up')
   const lastRepAtRef = useRef(0)
   const angleHistoryRef = useRef([])
   const repDepthReachedRef = useRef(false)
   const repExtensionReachedRef = useRef(false)
+  const completionLoggedRef = useRef(false)
+  const motionMinAngleRef = useRef(180)
+  const motionMaxAngleRef = useRef(0)
 
   const [isStreaming, setIsStreaming] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
@@ -53,7 +58,7 @@ export default function RepCounter() {
     return angleHistoryRef.current.reduce((a, b) => a + b, 0) / angleHistoryRef.current.length
   }
 
-  const drawPoseOverlay = (result) => {
+  const drawPoseOverlay = (landmarks) => {
     const canvas = canvasRef.current
     const video = videoRef.current
     if (!canvas || !video) return
@@ -68,7 +73,6 @@ export default function RepCounter() {
     const context = canvas.getContext('2d')
     context.clearRect(0, 0, width, height)
 
-    const landmarks = result?.landmarks?.[0]
     if (!landmarks) return
 
     context.lineWidth = 3
@@ -100,24 +104,24 @@ export default function RepCounter() {
         downThreshold: 110,
         upThreshold: 160,
         minRepInterval: 800,
-        requiredDepth: 96,
-        requiredExtension: 165,
+        requiredDepth: 108,
+        requiredExtension: 158,
       },
       pushup: {
         label: 'Push-up',
         downThreshold: 90,
         upThreshold: 150,
         minRepInterval: 700,
-        requiredDepth: 82,
-        requiredExtension: 158,
+        requiredDepth: 92,
+        requiredExtension: 150,
       },
       bicep_curl: {
         label: 'Bicep Curl',
         downThreshold: 150,
         upThreshold: 45,
         minRepInterval: 600,
-        requiredDepth: 52,
-        requiredExtension: 158,
+        requiredDepth: 60,
+        requiredExtension: 150,
       },
     }
     return map[mode] || map.squat
@@ -160,17 +164,17 @@ export default function RepCounter() {
     return { valid: true, message: mode === 'squat' ? 'Depth and lockout look good.' : 'Range looks clean. Keep control.' }
   }
 
-  const getPostureAdvice = (mode, stage, angleDeg) => {
+  const getPostureAdvice = (mode, stage) => {
     const tips = {
       squat: {
         Down: [
           'Keep your back straight!',
-          'Knees over toes — push them out',
+          'Knees over toes - push them out',
           'Drive through your heels',
           'Core tight, chest up',
         ],
         Up: [
-          'Go deeper — break parallel',
+          'Go deeper - break parallel',
           'Lower slowly, control the eccentric',
           'Breathe in on the way down',
           'Keep weight in your heels',
@@ -180,8 +184,8 @@ export default function RepCounter() {
         Down: [
           'Keep elbows close to body!',
           'Maintain a straight plank line',
-          'Don\'t let hips sag',
-          'Full range — chest to floor',
+          'Do not let hips sag',
+          'Full range - chest to floor',
         ],
         Up: [
           'Push explosively on the way up',
@@ -192,21 +196,20 @@ export default function RepCounter() {
       },
       bicep_curl: [
         'Keep your elbow stationary!',
-        'Full range of motion — go all the way',
+        'Full range of motion - go all the way',
         'Control the descent slowly',
-        'Don\'t swing your body',
+        'Do not swing your body',
       ],
     }
 
     const pool = [
       ...(tips[mode]?.[stage] || []),
       ...(Array.isArray(tips[mode]) ? tips[mode] : []),
-      'Great form — keep it up!',
+      'Great form - keep it up!',
     ]
     return pool[Math.floor((Date.now() / 4000)) % pool.length]
   }
 
-  // Detection loop useEffect
   useEffect(() => {
     let animationId
 
@@ -219,13 +222,15 @@ export default function RepCounter() {
 
         try {
           const result = poseLandmarkerRef.current.detectForVideo(video, performance.now())
-          if (result?.landmarks?.length) {
+          const landmarks = result?.landmarks?.[0]
+          const config = getExerciseConfig(exerciseMode)
+
+          if (landmarks) {
             setUserVisible(true)
-            const landmarks = result.landmarks[0]
-            const config = getExerciseConfig(exerciseMode)
 
             let activeAngle = 180
             let bicepState = null
+
             if (exerciseMode === 'squat') {
               const leftVis = (landmarks[23]?.visibility ?? 0) + (landmarks[25]?.visibility ?? 0) + (landmarks[27]?.visibility ?? 0)
               const rightVis = (landmarks[24]?.visibility ?? 0) + (landmarks[26]?.visibility ?? 0) + (landmarks[28]?.visibility ?? 0)
@@ -265,8 +270,6 @@ export default function RepCounter() {
                 bothExtended,
                 bothCurled,
                 oneArmCurledOnly,
-                leftAngle,
-                rightAngle,
               }
 
               activeAngle = bothArmsVisible ? (leftAngle + rightAngle) / 2 : Math.max(leftAngle, rightAngle)
@@ -275,16 +278,12 @@ export default function RepCounter() {
             const smoothed = getSmoothedAngle(activeAngle)
             setLastAngle(Math.round(smoothed))
 
-            if (exerciseMode === 'bicep_curl') {
-              if (smoothed > config.requiredExtension) {
-                repExtensionReachedRef.current = true
-              }
-            } else if (smoothed < config.requiredDepth) {
-              repDepthReachedRef.current = true
-            }
+            motionMinAngleRef.current = Math.min(motionMinAngleRef.current, smoothed)
+            motionMaxAngleRef.current = Math.max(motionMaxAngleRef.current, smoothed)
 
-            // Counting logic
             if (exerciseMode === 'bicep_curl') {
+              if (smoothed > config.requiredExtension) repExtensionReachedRef.current = true
+
               if (bicepState?.bothExtended) {
                 stageRef.current = 'Down'
                 repExtensionReachedRef.current = true
@@ -295,50 +294,67 @@ export default function RepCounter() {
 
               if ((oneHandAttempt || validDualCurlAttempt) && stageRef.current === 'Down') {
                 if (Date.now() - lastRepAtRef.current > config.minRepInterval) {
-                  if (validDualCurlAttempt && repExtensionReachedRef.current) {
-                    setReps(r => Math.min(normalizedTargetReps, r + 1))
+                  const fullRange = motionMaxAngleRef.current - motionMinAngleRef.current
+                  const rangeFallbackOk = fullRange >= 32
+
+                  if (validDualCurlAttempt && (repExtensionReachedRef.current || rangeFallbackOk)) {
+                    setReps((value) => Math.min(normalizedTargetReps, value + 1))
                     setIsFormCorrect(true)
                   } else {
-                    setInvalidReps(r => r + 1)
+                    setInvalidReps((value) => value + 1)
                     setIsFormCorrect(false)
                     setPostureAdvice(oneHandAttempt ? 'Rep not counted: use both arms together.' : 'Rep not counted: fully extend both arms first.')
                   }
+
                   lastRepAtRef.current = Date.now()
                   stageRef.current = 'Up'
                   repExtensionReachedRef.current = false
+                  motionMinAngleRef.current = 180
+                  motionMaxAngleRef.current = 0
                 }
               }
             } else {
+              if (smoothed < config.requiredDepth) repDepthReachedRef.current = true
               if (smoothed < config.downThreshold) stageRef.current = 'Down'
+
               if (smoothed > config.upThreshold && stageRef.current === 'Down') {
                 if (Date.now() - lastRepAtRef.current > config.minRepInterval) {
-                  if (repDepthReachedRef.current) {
-                    setReps(r => Math.min(normalizedTargetReps, r + 1))
+                  const fullRange = motionMaxAngleRef.current - motionMinAngleRef.current
+                  const rangeFallbackOk = fullRange >= 28
+
+                  if (repDepthReachedRef.current || rangeFallbackOk) {
+                    setReps((value) => Math.min(normalizedTargetReps, value + 1))
                     setIsFormCorrect(true)
                   } else {
-                    setInvalidReps(r => r + 1)
+                    setInvalidReps((value) => value + 1)
                     setIsFormCorrect(false)
                     setPostureAdvice(exerciseMode === 'squat' ? 'Rep not counted: go lower before standing up.' : 'Rep not counted: lower deeper before pressing up.')
                   }
+
                   lastRepAtRef.current = Date.now()
                   stageRef.current = 'Up'
                   repDepthReachedRef.current = false
+                  motionMinAngleRef.current = 180
+                  motionMaxAngleRef.current = 0
                 }
               }
             }
-            drawPoseOverlay(result)
+
+            drawPoseOverlay(landmarks)
             const liveFeedback = getLiveFormFeedback(exerciseMode, stageRef.current, Math.round(smoothed), true, config, bicepState)
             setIsFormCorrect(liveFeedback.valid)
-            setPostureAdvice(liveFeedback.valid ? getPostureAdvice(exerciseMode, stageRef.current, Math.round(smoothed)) : liveFeedback.message)
+            setPostureAdvice(liveFeedback.valid ? getPostureAdvice(exerciseMode, stageRef.current) : liveFeedback.message)
           } else {
             setUserVisible(false)
             setIsFormCorrect(false)
             setPostureAdvice('User not detected')
+            drawPoseOverlay(null)
           }
         } catch (e) {
-          console.error("Detection error:", e)
+          console.error('Detection error:', e)
         }
       }
+
       animationId = requestAnimationFrame(detect)
     }
 
@@ -351,22 +367,32 @@ export default function RepCounter() {
     }
   }, [isStreaming, exerciseMode, normalizedTargetReps])
 
+  useEffect(() => {
+    if (!isStreaming) return
+    if (reps < normalizedTargetReps) return
+    if (completionLoggedRef.current) return
+
+    completionLoggedRef.current = true
+    setSetCompleteMessage(`Set complete! You reached ${normalizedTargetReps} reps.`)
+    setPostureAdvice(`Set complete! ${normalizedTargetReps} reps done.`)
+
+    logActivity({
+      source: 'Rep Counter',
+      action: 'Target completed',
+      details: `${getExerciseConfig(exerciseMode).label}: ${normalizedTargetReps} reps finished.`,
+      meta: { exerciseMode, reps: normalizedTargetReps }
+    })
+  }, [isStreaming, reps, normalizedTargetReps, exerciseMode])
+
   const startCamera = async () => {
     setIsStarting(true)
     setError('')
-    setSetCompleteMessage('')
-    setSessionSeconds(0)
-    setReps(0)
-    setInvalidReps(0)
-    setIsFormCorrect(true)
-    stageRef.current = 'Up'
-    repDepthReachedRef.current = false
-    repExtensionReachedRef.current = false
-    angleHistoryRef.current = []
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720, facingMode: 'user' }
       })
+
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
 
@@ -384,6 +410,7 @@ export default function RepCounter() {
         })
         setIsPoseLoading(false)
       }
+
       setIsStreaming(true)
     } catch (e) {
       setError('Camera access denied or hardware not found.')
@@ -394,53 +421,77 @@ export default function RepCounter() {
   }
 
   const stopCamera = () => {
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop())
     setIsStreaming(false)
     setUserVisible(false)
   }
 
-  useEffect(() => {
-    if (!isStreaming) return
-    if (reps < normalizedTargetReps) return
+  const resetCount = () => {
+    setReps(0)
+    setInvalidReps(0)
+    setSetCompleteMessage('')
+    setLastAngle(180)
+    setPostureAdvice('Position your body')
+    setIsFormCorrect(true)
+    stageRef.current = 'Up'
+    lastRepAtRef.current = 0
+    angleHistoryRef.current = []
+    repDepthReachedRef.current = false
+    repExtensionReachedRef.current = false
+    completionLoggedRef.current = false
+    motionMinAngleRef.current = 180
+    motionMaxAngleRef.current = 0
+  }
 
-    stopCamera()
-    setPostureAdvice(`Set complete! ${normalizedTargetReps} reps done.`)
-    setSetCompleteMessage(`Set complete! You reached ${normalizedTargetReps} reps.`)
-  }, [isStreaming, reps, normalizedTargetReps])
+  const syncDashboardTasksForReps = (exerciseName, repCount) => {
+    try {
+      const stored = localStorage.getItem('arize_today_workout_tasks_v1')
+      if (!stored) return
+      let tasks = JSON.parse(stored)
+      let updated = false
+      tasks = tasks.map((task) => {
+        if (!task.done && task.title.toLowerCase().includes(exerciseName.toLowerCase().replace('-', '')) && repCount >= (task.reps || 1)) {
+          updated = true
+          return { ...task, done: true }
+        }
+        return task
+      })
+      if (updated) {
+        localStorage.setItem('arize_today_workout_tasks_v1', JSON.stringify(tasks))
+        window.dispatchEvent(new Event('arize_tasks_updated'))
+      }
+    } catch (e) {
+      console.error('Failed to sync tasks', e)
+    }
+  }
 
   const handleSave = async () => {
+    if (reps === 0) {
+      alert('No reps recorded yet.')
+      return
+    }
+
     setIsSaving(true)
     try {
       const exerciseName = getExerciseConfig(exerciseMode).label
+      const durationMinutes = Math.floor(sessionSeconds / 60)
+
       await saveWorkoutSession({
         exercise_name: exerciseName,
         reps,
-        duration_minutes: Math.floor(sessionSeconds / 60),
-        form_score: 95,
+        duration_minutes: durationMinutes,
+        form_score: isFormCorrect ? 95 : 75,
         calories_burned: reps * 4
       })
 
-      // Sync with Dashboard AI Workout Tasks
-      try {
-        const stored = localStorage.getItem('arize_today_workout_tasks_v1')
-        if (stored) {
-          let tasks = JSON.parse(stored)
-          let updated = false
-          tasks = tasks.map(t => {
-            if (!t.done && t.title.toLowerCase().includes(exerciseName.toLowerCase().replace('-', '')) && reps >= (t.reps || 1)) {
-              updated = true
-              return { ...t, done: true }
-            }
-            return t
-          })
-          if (updated) {
-            localStorage.setItem('arize_today_workout_tasks_v1', JSON.stringify(tasks))
-            window.dispatchEvent(new Event('arize_tasks_updated'))
-          }
-        }
-      } catch (e) {
-        console.error('Failed to sync tasks', e)
-      }
+      syncDashboardTasksForReps(exerciseName, reps)
+
+      logActivity({
+        source: 'Rep Counter',
+        action: 'Workout synced',
+        details: `${exerciseName} saved with ${reps} reps in ${durationMinutes} min.`,
+        meta: { exerciseName, reps, durationMinutes }
+      })
 
       alert('Workout session synchronized! Dashboard updated.')
     } catch (e) {
@@ -469,13 +520,12 @@ export default function RepCounter() {
     >
       <div style={{ gridColumn: 'span 12', marginBottom: '1rem' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Workout Coach</h1>
-        <p className="text-muted">Real-time AI-powered rep counting with posture coaching.</p>
+        <p className="text-muted">Solo AI rep counting mode for one user in front of the camera.</p>
       </div>
 
-      {/* Main Viewport */}
       <div className="card" style={{ gridColumn: 'span 8', padding: 0, overflow: 'hidden', position: 'relative', background: '#000', minHeight: '540px', borderRadius: '24px' }}>
-        <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
-        <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transform: 'scaleX(-1)' }} />
+        <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
 
         {!isStreaming && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', background: 'rgba(5,5,5,0.9)', backdropFilter: 'blur(10px)' }}>
@@ -483,8 +533,8 @@ export default function RepCounter() {
               <Camera size={48} strokeWidth={1} className="text-muted" />
             </div>
             <div style={{ textAlign: 'center' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Camera Stream Required</h3>
-              <p className="text-muted" style={{ maxWidth: '300px' }}>Position your device to see your full body for accurate tracking.</p>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Solo Camera Stream</h3>
+              <p className="text-muted" style={{ maxWidth: '340px' }}>Stand fully in frame. This mode tracks one person only and counts your reps.</p>
             </div>
             <button onClick={startCamera} className="btn-primary" style={{ height: '3.5rem', padding: '0 2.5rem', borderRadius: '12px' }}>
               {isStarting ? 'System Initializing...' : 'Activate Camera'}
@@ -501,26 +551,23 @@ export default function RepCounter() {
         )}
 
         {isStreaming && (
-          <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', pointerEvents: 'none' }}>
-            <div style={{ background: 'rgba(5,5,5,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '1.25rem 2rem', borderRadius: '20px' }}>
-              <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.1em' }}>Reps Completed</div>
-              <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: 1 }}>{reps}</div>
-              <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', fontWeight: 700, color: '#f87171' }}>
+          <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', pointerEvents: 'none', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ background: 'rgba(5,5,5,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', padding: '1rem 1.25rem', borderRadius: '16px', minWidth: '230px' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.1em', marginBottom: '0.35rem' }}>Reps Completed</div>
+              <div style={{ fontSize: '2.2rem', fontWeight: 900, lineHeight: 1 }}>{reps}</div>
+              <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', fontWeight: 700, color: '#f87171' }}>
                 Rejected reps: {invalidReps}
-              </div>
-              <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '1rem', width: '120px' }}>
-                <div style={{ width: `${Math.min(100, (reps / normalizedTargetReps) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'flex-end' }}>
               <div style={{ background: userVisible ? 'rgba(74, 222, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)', border: `1px solid ${userVisible ? '#4ade80' : '#ef4444'}`, padding: '0.5rem 1rem', borderRadius: '99px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div style={{ width: '8px', height: '8px', background: userVisible ? '#4ade80' : '#ef4444', borderRadius: '50%' }} />
                 <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: userVisible ? '#4ade80' : '#ef4444' }}>
                   {userVisible ? 'Vision Active' : 'User Out of View'}
                 </span>
               </div>
-              <div style={{ background: isFormCorrect ? 'var(--accent)' : '#ef4444', color: '#ffffff', padding: '0.75rem 1.5rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase' }}>
+              <div style={{ background: isFormCorrect ? 'var(--accent)' : '#ef4444', color: '#ffffff', padding: '0.65rem 1.2rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.78rem', textTransform: 'uppercase', maxWidth: '360px', textAlign: 'right' }}>
                 {postureAdvice}
               </div>
             </div>
@@ -528,24 +575,25 @@ export default function RepCounter() {
         )}
       </div>
 
-      {/* Control Panel */}
       <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div className="card" style={{ borderRadius: '24px' }}>
           <h3 style={{ fontSize: '1.125rem', marginBottom: '1.5rem' }}>Session Logic</h3>
-          <div style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700, marginBottom: '1rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }}>
-            💡 Coach guides you in real-time during your session
-          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {setCompleteMessage && (
               <div style={{ fontSize: '0.75rem', color: '#4ade80', fontWeight: 700, padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(74,222,128,0.45)', background: 'rgba(74,222,128,0.12)' }}>
                 {setCompleteMessage}
               </div>
             )}
+
             <div>
               <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Tracking Target</label>
               <select
                 value={exerciseMode}
-                onChange={e => { setExerciseMode(e.target.value); setReps(0); setInvalidReps(0); setSetCompleteMessage(''); stageRef.current = 'Up'; repDepthReachedRef.current = false; repExtensionReachedRef.current = false; }}
+                onChange={(e) => {
+                  setExerciseMode(e.target.value)
+                  resetCount()
+                }}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               >
                 <option value="squat">Squats (Hip/Knee)</option>
@@ -553,12 +601,13 @@ export default function RepCounter() {
                 <option value="bicep_curl">Bicep Curls (Elbow/Wrist)</option>
               </select>
             </div>
+
             <div>
-              <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Daily Goal</label>
+              <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '0.75rem' }}>Target Reps</label>
               <input
                 type="number"
                 value={targetReps}
-                onChange={e => setTargetReps(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) => setTargetReps(Math.max(1, Number(e.target.value) || 1))}
                 style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '1rem', color: '#fff', borderRadius: '12px', fontSize: '0.935rem' }}
               />
             </div>
@@ -577,36 +626,37 @@ export default function RepCounter() {
                 <Save size={18} /> Sync Data
               </button>
             </div>
-            <button onClick={() => { setReps(0); setInvalidReps(0); setSetCompleteMessage(''); stageRef.current = 'Up'; repDepthReachedRef.current = false; repExtensionReachedRef.current = false; }} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
+
+            <button onClick={resetCount} className="text-muted" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, textTransform: 'uppercase' }}>
               <RotateCcw size={12} /> Clear Current Count
             </button>
           </div>
         </div>
 
-        {/* Live Metrics */}
         <div className="card" style={{ borderRadius: '24px' }}>
-          <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }} className="text-muted">
-            Biometric Feed
+          <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem' }} className="text-muted">
+            Live Metrics
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)' }}>
-              <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Joint Angle</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{lastAngle}°</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div style={{ padding: '0.85rem', background: 'var(--surface-hover)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div className="text-muted" style={{ fontSize: '0.64rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.35rem' }}>Current Angle</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900 }}>{lastAngle}°</div>
             </div>
-            <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)' }}>
-              <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Session</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{Math.floor(sessionSeconds / 60)}:{String(sessionSeconds % 60).padStart(2, '0')}</div>
+            <div style={{ padding: '0.85rem', background: 'var(--surface-hover)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div className="text-muted" style={{ fontSize: '0.64rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.35rem' }}>Session</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900 }}>{Math.floor(sessionSeconds / 60)}:{String(sessionSeconds % 60).padStart(2, '0')}</div>
             </div>
-            <div style={{ padding: '1.25rem', background: 'var(--surface-hover)', borderRadius: '16px', border: '1px solid var(--border)', gridColumn: 'span 2' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Target Accuracy</div>
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.min(100, Math.round((reps / normalizedTargetReps) * 100))}%</span>
+            <div style={{ padding: '0.85rem', background: 'var(--surface-hover)', borderRadius: '12px', border: '1px solid var(--border)', gridColumn: 'span 2' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                <div className="text-muted" style={{ fontSize: '0.64rem', fontWeight: 800, textTransform: 'uppercase' }}>Target Progress</div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--accent)' }}>{Math.min(100, Math.round((reps / normalizedTargetReps) * 100))}%</span>
               </div>
-              <div style={{ height: '6px', background: 'var(--bg)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ height: '6px', background: 'var(--bg)', borderRadius: '4px', overflow: 'hidden' }}>
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(100, (reps / normalizedTargetReps) * 100)}%` }}
-                  style={{ height: '100%', background: 'var(--accent)', borderRadius: '3px' }}
+                  style={{ height: '100%', background: 'var(--accent)' }}
                 />
               </div>
             </div>

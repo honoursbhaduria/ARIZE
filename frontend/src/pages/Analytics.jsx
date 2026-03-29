@@ -12,11 +12,14 @@ import {
   Utensils
 } from 'lucide-react'
 import { fetchAnalytics, fetchAnalyticsOverview, fetchStreakLeaderboard } from '../services/api'
+import { getActivityFeed, subscribeToActivityFeed } from '../services/activityFeed'
+import './Analytics.css'
 
 export default function Analytics() {
   const [consistencyData, setConsistencyData] = useState(null)
   const [overviewData, setAnalyticsOverview] = useState(null)
   const [leaderboard, setLeaderboard] = useState([])
+   const [activityFeed, setActivityFeed] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -40,6 +43,12 @@ export default function Analytics() {
     loadAllData()
   }, [])
 
+   useEffect(() => {
+      setActivityFeed(getActivityFeed())
+      const unsubscribe = subscribeToActivityFeed(setActivityFeed)
+      return unsubscribe
+   }, [])
+
   const workoutTrend = useMemo(() => {
     if (!overviewData?.chart_data?.workouts) return [40, 65, 30, 85, 45, 90, 60]
     return overviewData.chart_data.workouts.map(w => Math.min(100, (w.form_score || 50)))
@@ -60,6 +69,37 @@ export default function Analytics() {
       <div style={{ gridColumn: 'span 12', marginBottom: '1rem' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Performance Analysis</h1>
         <p className="text-muted">Real-time data synchronization with your training and nutrition logs.</p>
+      </div>
+
+      <div className="card analytics-timeline-card" style={{ gridColumn: 'span 12' }}>
+         <div className="analytics-timeline-header">
+            <div className="analytics-timeline-header-copy">
+               <h3 style={{ fontSize: '1.125rem' }}>Live Activity Timeline</h3>
+               <p className="text-muted" style={{ fontSize: '0.75rem' }}>Shows actions from Rep Counter, Progress Gallery, Nutrition & Shopping, and Settings.</p>
+            </div>
+            <div className="analytics-event-count">
+               {activityFeed.length} total events
+            </div>
+         </div>
+
+         {activityFeed.length === 0 ? (
+            <div className="analytics-empty-feed">
+              <p className="text-muted" style={{ fontSize: '0.875rem' }}>No activity yet. Start a workout, upload a progress photo, update settings, or use nutrition/shopping to populate this feed.</p>
+            </div>
+         ) : (
+            <div className="analytics-timeline-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+               {activityFeed.slice(0, 20).map(item => (
+                  <div key={item.id} className="analytics-timeline-item" style={{ display: 'grid', gap: '0.75rem', alignItems: 'center', padding: '0.75rem 0.9rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--surface-hover)' }}>
+                     <div className="analytics-timeline-source" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.75 }}>{item.source}</div>
+                     <div className="analytics-timeline-content">
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>{item.action}</div>
+                        {item.details ? <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.15rem' }}>{item.details}</div> : null}
+                     </div>
+                     <div className="text-muted analytics-timeline-time" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{new Date(item.timestamp).toLocaleString()}</div>
+                  </div>
+               ))}
+            </div>
+         )}
       </div>
 
       {/* Primary KPI Cards */}
