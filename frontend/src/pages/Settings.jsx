@@ -118,7 +118,7 @@ export default function Settings() {
                <h3 style={{ fontSize: '1.125rem' }}>Profile Configuration</h3>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Age</label>
                   <input value={profile.age} onChange={e => setProfile({...profile, age: e.target.value})} style={inputStyle} />

@@ -218,7 +218,7 @@ export default function AppStore() {
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent)' }}>Nutrition Breakdown</span>
                      </div>
                      <div style={{ fontWeight: 700, marginBottom: '0.75rem', fontSize: '0.875rem' }}>{macros.food || foodQuery}</div>
-                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+                     <div className="grid-mobile-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
                         {[
                            { label: 'Calories', value: `${macros.calories}`, unit: 'kcal', color: '#fb923c' },
                            { label: 'Protein', value: `${macros.protein}`, unit: 'g', color: '#4ade80' },
@@ -268,7 +268,7 @@ export default function AppStore() {
                   <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', border: '1px solid var(--accent)' }}>
                      <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem' }}>🔍 Visual Analysis</div>
                      <div style={{ fontWeight: 700, marginBottom: '0.75rem', fontSize: '0.875rem' }}>{macros.food || 'Food Detected'}</div>
-                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+                     <div className="grid-mobile-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
                         {[
                            { label: 'Calories', value: macros.calories, unit: 'kcal', color: '#fb923c' },
                            { label: 'Protein', value: macros.protein, unit: 'g', color: '#4ade80' },

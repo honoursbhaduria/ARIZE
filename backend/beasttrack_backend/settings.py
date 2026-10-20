@@ -2,7 +2,10 @@ from pathlib import Path
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
-import dj_database_url
+try:
+    import dj_database_url
+except ImportError:
+    dj_database_url = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -22,6 +25,8 @@ if DEBUG:
 
 # AI API Configuration
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
+SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://phpmpjymtujvjevlogng.supabase.co')
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', 'sb_publishable_1pz6dMTneFqL1eLr8jOI8g_dw34k1LT')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -70,7 +75,7 @@ ASGI_APPLICATION = 'beasttrack_backend.asgi.application'
 
 # Database - Use Neon PostgreSQL if DATABASE_URL is set, otherwise fallback to SQLite
 DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL:
+if DATABASE_URL and dj_database_url:
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,

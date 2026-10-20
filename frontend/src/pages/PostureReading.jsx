@@ -58,7 +58,7 @@ export default function PostureReading() {
         {!loading && error && <div style={{ padding: '2rem', textAlign: 'center', color: '#f87171' }}>{error}</div>}
 
         {!loading && !error && article && (
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+          <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <BookOpen size={18} />

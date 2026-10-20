@@ -1,9 +1,12 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Play, Cpu } from 'lucide-react'
+import { ArrowRight, Play, Cpu, Dumbbell, UserCheck, LogIn } from 'lucide-react'
+import { isAuthenticated } from '../services/api'
 import './Landing.css'
 
 export default function Landing() {
+  const authenticated = isAuthenticated()
+
   return (
     <div className="landing-root">
       <video
@@ -15,6 +18,31 @@ export default function Landing() {
         playsInline
       />
       <div className="landing-overlay" />
+
+      <header className="landing-nav">
+        <Link to="/" className="landing-nav-brand">
+          <Dumbbell size={22} strokeWidth={2.8} />
+          <span>ARIZE</span>
+        </Link>
+        <div className="landing-nav-actions">
+          {authenticated ? (
+            <Link to="/dashboard" className="landing-nav-btn-highlight">
+              <UserCheck size={16} />
+              <span>Go to Dashboard</span>
+            </Link>
+          ) : (
+            <>
+              <Link to="/login" className="landing-nav-btn-login">
+                <LogIn size={15} />
+                <span>Sign In</span>
+              </Link>
+              <Link to="/register" className="landing-nav-btn-register">
+                <span>Get Started</span>
+              </Link>
+            </>
+          )}
+        </div>
+      </header>
 
       <main className="landing-content">
         <motion.div

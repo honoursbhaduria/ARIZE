@@ -1,5 +1,8 @@
+from django.conf import settings
 from django.contrib.auth.models import User
 from datetime import timedelta
+
+import httpx
 
 from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
@@ -113,14 +116,29 @@ class LoginView(APIView):
         password = request.data.get('password')
 
         if not username or not password:
-            return Response({'detail': 'Username/email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Username/email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.filter(username=username).first()
-        if not user and '@' in username:
-            user = User.objects.filter(email__iexact=username).first()
+        # Match either username or email (case-insensitive)
+        candidates = list(
+            User.objects.filter(
+                Q(username__iexact=username) | Q(email__iexact=username)
+            )
+        )
 
-        if not user or not user.check_password(password):
-            return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        user = None
+        for candidate in candidates:
+            if candidate.check_password(password):
+                user = candidate
+                break
+
+        if not user:
+            return Response({'detail': 'Invalid username/email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.is_active:
+            return Response({'detail': 'This account is inactive.'}, status=status.HTTP_403_FORBIDDEN)
+
+        UserProfile.objects.get_or_create(user=user)
+        NotificationPreference.objects.get_or_create(user=user)
 
         refresh = RefreshToken.for_user(user)
         return Response(
@@ -131,16 +149,34 @@ class LoginView(APIView):
         )
 
 
+def get_or_create_user_by_email(email, preferred_username=''):
+    user = User.objects.filter(email__iexact=email).first()
+    if user:
+        return user
+
+    base_username = (preferred_username or email.split('@')[0] or 'user').strip()
+    candidate_username = base_username
+    counter = 1
+    while User.objects.filter(username__iexact=candidate_username).exists():
+        candidate_username = f"{base_username}_{counter}"
+        counter += 1
+
+    user = User.objects.create_user(username=candidate_username, email=email)
+    user.set_unusable_password()
+    user.save()
+    return user
+
+
 class GoogleLoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '')
+        email = (request.data.get('email') or '').strip().lower()
         if not email:
-            return Response({'detail': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        username = email.split('@')[0]
-        user, _ = User.objects.get_or_create(username=username, defaults={'email': email})
+        user = get_or_create_user_by_email(email)
+
         UserProfile.objects.get_or_create(user=user)
         NotificationPreference.objects.get_or_create(user=user)
 
@@ -149,6 +185,88 @@ class GoogleLoginView(APIView):
             {
                 'user': {'id': user.id, 'username': user.username, 'email': user.email},
                 'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)},
+            }
+        )
+
+
+class SupabaseLoginView(APIView):
+    """Exchange a verified Supabase session for this API's JWT pair."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        access_token = (request.data.get('access_token') or '').strip()
+        if not access_token:
+            return Response({'detail': 'Supabase access token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            sb_response = httpx.get(
+                f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/user",
+                headers={'apikey': settings.SUPABASE_ANON_KEY, 'Authorization': f'Bearer {access_token}'},
+                timeout=10,
+            )
+        except httpx.HTTPError:
+            return Response({'detail': 'Unable to reach the authentication provider.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        if sb_response.status_code != 200:
+            return Response({'detail': 'Your session is invalid or has expired. Please sign in again.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        sb_user = sb_response.json()
+        email = (sb_user.get('email') or '').strip().lower()
+        if not email:
+            return Response({'detail': 'Your account has no email address.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        metadata = sb_user.get('user_metadata') or {}
+        user = get_or_create_user_by_email(email, metadata.get('username', ''))
+        if not user.is_active:
+            return Response({'detail': 'This account is inactive.'}, status=status.HTTP_403_FORBIDDEN)
+
+        UserProfile.objects.get_or_create(user=user)
+        NotificationPreference.objects.get_or_create(user=user)
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                'user': {'id': user.id, 'username': user.username, 'email': user.email},
+                'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)},
+            }
+        )
+
+
+class DemoLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        demo_username = 'demo_user'
+        demo_email = 'demo@arize.ai'
+
+        user = User.objects.filter(username=demo_username).first()
+        if not user:
+            user = User.objects.filter(email=demo_email).first()
+
+        if not user:
+            user = User.objects.create_user(
+                username=demo_username,
+                email=demo_email,
+                password='demopassword123',
+            )
+        else:
+            user.set_password('demopassword123')
+            user.save()
+
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        if not profile.goal:
+            profile.goal = 'muscle_gain'
+        profile.streak_days = max(profile.streak_days, 7)
+        profile.save()
+
+        NotificationPreference.objects.get_or_create(user=user)
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                'user': {'id': user.id, 'username': user.username, 'email': user.email},
+                'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)},
+                'is_demo': True,
             }
         )
 

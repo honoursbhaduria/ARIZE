@@ -107,6 +107,7 @@ export default function GymMascot() {
       <AnimatePresence>
         {showBubble && (
           <motion.div
+            className="mascot-bubble"
             initial={{ opacity: 0, scale: 0.8, y: 10, x: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 10, x: 10 }}

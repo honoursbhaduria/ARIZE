@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.32",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.577.0",
     "ogl": "^1.0.11",

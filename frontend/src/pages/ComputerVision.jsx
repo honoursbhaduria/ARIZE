@@ -194,6 +194,8 @@ export default function ComputerVision() {
                gridColumn: 'span 12',
                color: '#ffffff',
                display: 'flex',
+               flexWrap: 'wrap',
+               gap: '1.5rem',
                justifyContent: 'space-between',
                alignItems: 'center',
                backgroundImage: `linear-gradient(110deg, rgba(8, 8, 8, 0.88), rgba(8, 8, 8, 0.72)), url('/dashboard-gym-sequence.png')`,
@@ -207,7 +209,7 @@ export default function ComputerVision() {
                <p style={{ fontSize: '0.875rem', opacity: 0.8, maxWidth: '600px', marginBottom: '1.5rem' }}>
                   Verify your environment and camera setup to enable 60 FPS real-time rep counting and form feedback.
                </p>
-               <div style={{ display: 'flex', gap: '1rem' }}>
+               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                   <Link to="/counter" className="btn-primary" style={{ background: '#ffffff', color: '#0a0a0a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                      <PlayCircle size={18} /> Launch Counter
                   </Link>
@@ -216,7 +218,7 @@ export default function ComputerVision() {
                   </button>
                </div>
             </div>
-            <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.42)', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.18)', minWidth: '240px', backdropFilter: 'blur(2px)' }}>
+            <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.42)', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.18)', minWidth: 'min(240px, 100%)', flex: '1 1 240px', backdropFilter: 'blur(2px)' }}>
                <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#ffffff', opacity: 0.75, marginBottom: '1rem' }}>System Status</div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600 }}>
@@ -254,7 +256,7 @@ export default function ComputerVision() {
                <p style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
                   Our core vision engine tracks 33 body landmarks to calculate joint angles and movement velocity.
                </p>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+               <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
                   <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)' }}>
                      <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>Skeleton Overlay</div>
                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Real-time 2D joint mapping</div>

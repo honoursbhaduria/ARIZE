@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import { Search, Bell, User, Plus } from 'lucide-react'
+import { Search, Bell, Menu } from 'lucide-react'
 import { getCurrentUser } from '../services/api'
 
-export default function TopBar() {
+export default function TopBar({ onMenuClick }) {
   const user = useMemo(() => getCurrentUser(), [])
   
   const displayName = user?.username || 'Guest'
@@ -14,6 +14,9 @@ export default function TopBar() {
   return (
     <header className="top-bar">
       <div className="top-bar-left">
+        <button type="button" className="icon-button menu-button" onClick={onMenuClick} aria-label="Open menu">
+          <Menu size={22} />
+        </button>
         <div className="search-container">
           <Search className="search-icon" size={16} />
           <input type="text" placeholder="Search features, workouts..." className="search-input" />
@@ -27,7 +30,7 @@ export default function TopBar() {
 
         <div className="profile-trigger">
           <div className="avatar" style={{ textTransform: 'uppercase' }}>{initials}</div>
-          <span style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize' }}>{displayName}</span>
+          <span className="profile-name" style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize' }}>{displayName}</span>
         </div>
       </div>
     </header>

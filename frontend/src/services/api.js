@@ -1,3 +1,5 @@
+import { supabase } from '../utils/supabase/client'
+
 const DEFAULT_API_BASE_URL = (() => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     const host = window.location.hostname
@@ -43,6 +45,11 @@ export function clearAuthSession() {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  try {
+    supabase.auth.signOut().catch(() => {})
+  } catch {
+    // ignore
+  }
 }
 
 export function getCurrentUser() {
@@ -122,20 +129,25 @@ async function request(path, options = {}, retryOnAuthFailure = true) {
   const accessToken = getAccessToken()
   const authHeader = !skipAuth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    headers: isFormData
-      ? {
-        ...authHeader,
-        ...(mergedOptions.headers || {}),
-      }
-      : {
-        'Content-Type': 'application/json',
-        ...authHeader,
-        ...(mergedOptions.headers || {}),
-      },
-    ...mergedOptions,
-  })
+  let response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      credentials: 'include',
+      headers: isFormData
+        ? {
+          ...authHeader,
+          ...(mergedOptions.headers || {}),
+        }
+        : {
+          'Content-Type': 'application/json',
+          ...authHeader,
+          ...(mergedOptions.headers || {}),
+        },
+      ...mergedOptions,
+    })
+  } catch {
+    throw new Error('Unable to connect to server. Please ensure the backend is running at ' + API_BASE_URL)
+  }
 
   if (response.status === 401 && !skipAuth && retryOnAuthFailure && getRefreshToken()) {
     const nextAccess = await refreshAccessToken()
@@ -184,6 +196,87 @@ export function loginWithGoogle(email) {
     setAuthSession(response)
     return response
   })
+}
+
+export function loginAsDemo() {
+  return request('/auth/demo/', {
+    method: 'POST',
+    body: JSON.stringify({}),
+    skipAuth: true,
+  }).then((response) => {
+    setAuthSession(response)
+    return response
+  })
+}
+
+// Supabase tokens are not accepted by the backend, so every Supabase session
+// is exchanged for the backend's own JWT pair before it is stored.
+export function exchangeSupabaseSession(session) {
+  return request('/auth/supabase/', {
+    method: 'POST',
+    body: JSON.stringify({ access_token: session?.access_token || '' }),
+    skipAuth: true,
+  }).then((response) => {
+    setAuthSession(response)
+    return response
+  })
+}
+
+export async function supabaseLogin({ email, password }) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return exchangeSupabaseSession(data.session)
+}
+
+// Returns the Supabase session, or null when email confirmation is required.
+export async function supabaseRegister({ email, password, username }) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        username: username || email.split('@')[0],
+      },
+    },
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data.session
+}
+
+export async function supabaseGoogleLogin() {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      // Login page picks up the returned session and exchanges it.
+      redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined,
+    },
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data
+}
+
+// Completes an OAuth redirect: exchanges any pending Supabase session.
+export async function completeSupabaseRedirect() {
+  const { data } = await supabase.auth.getSession()
+  if (!data?.session) {
+    return null
+  }
+  return exchangeSupabaseSession(data.session)
 }
 
 // Chat

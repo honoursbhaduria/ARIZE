@@ -24,6 +24,22 @@ class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
 
+    def validate_username(self, value):
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError('Username cannot be empty.')
+        if User.objects.filter(username__iexact=cleaned).exists():
+            raise serializers.ValidationError('A user with that username already exists.')
+        return cleaned
+
+    def validate_email(self, value):
+        cleaned = value.strip().lower()
+        if not cleaned:
+            raise serializers.ValidationError('Email cannot be empty.')
+        if User.objects.filter(email__iexact=cleaned).exists():
+            raise serializers.ValidationError('A user with that email already exists.')
+        return cleaned
+
     def create(self, validated_data):
         user = User.objects.create_user(
             username=validated_data['username'],

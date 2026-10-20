@@ -10,7 +10,8 @@ import {
   Settings,
   ScanLine,
   LogOut,
-  Camera
+  Camera,
+  X
 } from 'lucide-react'
 import { clearAuthSession } from '../services/api'
 
@@ -26,15 +27,18 @@ const primaryLinks = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
-export default function SidebarNav() {
+export default function SidebarNav({ open = false, onClose }) {
   const location = useLocation()
   const navigate = useNavigate()
 
   return (
-    <aside className="sidebar-nav">
+    <aside className={`sidebar-nav ${open ? 'open' : ''}`}>
       <div className="sidebar-brand">
         <Dumbbell size={20} strokeWidth={3} />
         <span>ARIZE</span>
+        <button type="button" className="sidebar-close" onClick={onClose} aria-label="Close menu">
+          <X size={20} />
+        </button>
       </div>
 
       <nav className="sidebar-links">
