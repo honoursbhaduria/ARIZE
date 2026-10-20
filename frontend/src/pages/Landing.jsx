@@ -87,7 +87,7 @@ function RoundArrow({ direction, onClick, label }) {
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="grid size-11 shrink-0 place-items-center rounded-full border-2 border-gold-deep bg-gold-ink text-gold transition-transform hover:scale-105 active:scale-95"
+      className="btn-texture grid size-11 shrink-0 place-items-center rounded-full border-2 border-gold-deep bg-gold-ink text-gold transition-transform hover:scale-105 active:scale-95"
     >
       <Icon icon={direction === 'left' ? ArrowLeft01Icon : ArrowRight01Icon} />
     </button>
@@ -122,7 +122,7 @@ function SignupForm() {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+    <form onSubmit={submit} noValidate className="grid gap-x-8 gap-y-5 sm:grid-cols-2 sm:gap-y-7">
       {fields.map((field) => (
         <label key={field.key} className={cn('flex flex-col gap-2', field.key === 'password' && 'sm:col-span-2')}>
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -134,7 +134,7 @@ function SignupForm() {
             autoComplete={field.autoComplete}
             value={form[field.key]}
             onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
-            className="h-11 border-0 border-b border-input bg-transparent px-0 text-base text-[#e8ecf1] outline-none transition-colors focus:border-gold"
+            className="h-10 border-0 border-b border-input bg-transparent px-0 text-base text-[#e8ecf1] outline-none transition-colors focus:border-gold"
           />
         </label>
       ))}
@@ -266,14 +266,14 @@ export default function Landing() {
       <div className="divider-gem" />
 
       {/* ---------- Why ---------- */}
-      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
+      <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
         <SectionTitle title="Guesswork doesn’t build muscle" text="Everything you need to train well, in one place." />
-        <div className="mt-14 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid grid-cols-2 gap-x-5 gap-y-8 sm:gap-x-10 sm:gap-y-10 lg:grid-cols-3">
           {WHY.map((item) => (
             <div key={item.title} className="flex flex-col gap-2">
               <Icon icon={item.icon} size={26} className="text-gold" />
-              <h3 className="font-sans text-xl font-medium tracking-normal text-[#e8ecf1]">{item.title}</h3>
-              <p className="text-[#919dab]">{item.text}</p>
+              <h3 className="font-sans text-base font-medium tracking-normal text-[#e8ecf1] sm:text-xl">{item.title}</h3>
+              <p className="text-sm text-[#919dab] sm:text-base">{item.text}</p>
             </div>
           ))}
         </div>
@@ -282,10 +282,10 @@ export default function Landing() {
       <div className="divider-wood" />
 
       {/* ---------- How it works ---------- */}
-      <section id="how" className="mx-auto grid max-w-7xl items-center gap-14 px-5 py-24 sm:px-8 lg:grid-cols-2">
-        <div>
+      <section id="how" className="mx-auto grid max-w-7xl items-center gap-14 px-5 py-16 sm:py-24 sm:px-8 lg:grid-cols-2">
+        <div className="text-center lg:text-left">
           <h2 className="text-[clamp(2.2rem,5vw,3.4rem)] leading-[1.05] font-bold text-[#e8ecf1]">Your path to a stronger, healthier you</h2>
-          <p className="mt-6 max-w-md text-lg text-muted-foreground">Three steps and you are training with feedback on every rep.</p>
+          <p className="mx-auto mt-6 max-w-md text-lg text-muted-foreground lg:mx-0">Three steps and you are training with feedback on every rep.</p>
         </div>
         <div className="flex flex-col gap-4">
           {STEPS.map((step, index) => {
@@ -314,7 +314,7 @@ export default function Landing() {
       <div className="divider-wood" />
 
       {/* ---------- Training carousel ---------- */}
-      <section id="training" className="relative overflow-hidden py-24">
+      <section id="training" className="relative overflow-hidden py-16 sm:py-24">
         <SectionTitle title="The camera counts. You lift." text="Pose tracking runs in your browser, so video never leaves your device." className="px-5" />
 
         <div className="relative mx-auto mt-14 flex max-w-6xl items-center justify-center gap-6 px-5">
@@ -337,22 +337,27 @@ export default function Landing() {
               </CardHeader>
             </Card>
           ))}
-          <div className="absolute inset-x-2 top-1/2 flex -translate-y-1/2 justify-between sm:inset-x-6">
+          <div className="absolute inset-x-6 top-1/2 hidden -translate-y-1/2 justify-between md:flex">
             <RoundArrow direction="left" label="Previous exercise" onClick={() => shift(-1, MOVES.length, setMove)} />
             <RoundArrow direction="right" label="Next exercise" onClick={() => shift(1, MOVES.length, setMove)} />
           </div>
+        </div>
+        <div className="mt-6 flex items-center justify-center gap-5 md:hidden">
+          <RoundArrow direction="left" label="Previous exercise" onClick={() => shift(-1, MOVES.length, setMove)} />
+          <span className="text-sm text-muted-foreground">{move + 1} / {MOVES.length}</span>
+          <RoundArrow direction="right" label="Next exercise" onClick={() => shift(1, MOVES.length, setMove)} />
         </div>
       </section>
 
       <div className="divider-wood" />
 
       {/* ---------- Coaching cues ---------- */}
-      <section className="relative overflow-hidden py-24">
+      <section className="relative overflow-hidden py-16 sm:py-24">
         <img src="/landing/dark-gym.webp" alt="" loading="lazy" className="absolute inset-0 size-full object-cover opacity-15" />
         <div className="relative mx-auto max-w-3xl px-5 text-center sm:px-8">
           <SectionTitle title="Cues while you train" text="Workout Coach talks you through each set, so you fix form mid-rep instead of after." />
           <div className="mt-12 flex items-center gap-4">
-            <RoundArrow direction="left" label="Previous cue" onClick={() => shift(-1, CUES.length, setCue)} />
+            <span className="hidden sm:block"><RoundArrow direction="left" label="Previous cue" onClick={() => shift(-1, CUES.length, setCue)} /></span>
             <figure className="flex-1" aria-live="polite">
               <Icon icon={QuoteDownIcon} size={46} className="mx-auto text-gold" />
               <blockquote key={cue} className="landing-rise mt-6 font-serif text-[clamp(1.35rem,2.8vw,2rem)] leading-snug text-[#e8ecf1]">
@@ -360,9 +365,10 @@ export default function Landing() {
               </blockquote>
               <figcaption className="mt-6 inline-flex rounded-full border border-gold-deep px-4 py-1.5 text-sm text-gold">{CUES[cue].exercise}</figcaption>
             </figure>
-            <RoundArrow direction="right" label="Next cue" onClick={() => shift(1, CUES.length, setCue)} />
+            <span className="hidden sm:block"><RoundArrow direction="right" label="Next cue" onClick={() => shift(1, CUES.length, setCue)} /></span>
           </div>
-          <div className="mt-8 flex justify-center gap-2">
+          <div className="mt-8 flex items-center justify-center gap-2">
+            <span className="mr-3 sm:hidden"><RoundArrow direction="left" label="Previous cue" onClick={() => shift(-1, CUES.length, setCue)} /></span>
             {CUES.map((item, index) => (
               <button
                 key={item.exercise}
@@ -372,6 +378,7 @@ export default function Landing() {
                 className={cn('h-2 rounded-full transition-all', index === cue ? 'w-6 bg-gold' : 'w-2 bg-white/25')}
               />
             ))}
+            <span className="ml-3 sm:hidden"><RoundArrow direction="right" label="Next cue" onClick={() => shift(1, CUES.length, setCue)} /></span>
           </div>
         </div>
       </section>
@@ -381,8 +388,8 @@ export default function Landing() {
       {/* ---------- Coach ---------- */}
       <section id="coaching" className="py-24">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-8 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="relative">
-            <h2 className="text-metal text-metal--teal relative z-10 text-[clamp(2.6rem,6.5vw,5rem)] leading-[0.98] font-extrabold">
+          <div className="relative text-center lg:text-left">
+            <h2 className="text-metal text-metal--gold relative z-10 text-[clamp(2.6rem,6.5vw,5rem)] leading-[0.98] font-extrabold">
               A coach that
               <br />
               knows your
@@ -393,14 +400,14 @@ export default function Landing() {
               src="/landing/coach.webp"
               alt="Athlete training with dumbbells"
               loading="lazy"
-              className="mt-8 aspect-[4/5] w-full max-w-xs rounded-xs border-2 border-gold-deep object-cover lg:absolute lg:top-1/2 lg:right-0 lg:mt-0 lg:w-56 lg:-translate-y-1/2"
+              className="mx-auto mt-8 aspect-[4/5] w-full max-w-xs rounded-xs border-2 border-gold-deep object-cover lg:absolute lg:top-1/2 lg:right-0 lg:mt-0 lg:w-56 lg:-translate-y-1/2"
             />
           </div>
-          <div>
+          <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
             <p className="text-lg leading-relaxed text-muted-foreground">
               Ask about meals, sleep or recovery and get answers that use your goal, weight, diet and training history. Upload blood reports and the advice adapts to those too.
             </p>
-            <ul className="mt-6 flex flex-col gap-3 text-[#d7dee6]">
+            <ul className="mt-6 flex flex-col items-start gap-3 text-left text-[#d7dee6]">
               {['Plans built around your goal', 'Calories and macros from a photo of your plate', 'Heart health check with next steps'].map((line) => (
                 <li key={line} className="flex items-center gap-3">
                   <span className="size-2 rotate-45 bg-gold" />
@@ -418,11 +425,11 @@ export default function Landing() {
       <div className="divider-wood" />
 
       {/* ---------- Join ---------- */}
-      <section id="join" className="mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <Card className="grid gap-12 rounded-xs border-border px-6 py-12 sm:px-12 lg:grid-cols-[0.9fr_1.1fr]">
-          <CardHeader className="px-0">
+      <section id="join" className="mx-auto max-w-7xl px-5 py-16 sm:py-24 sm:px-8">
+        <Card className="grid gap-8 rounded-xs border-border px-5 py-8 sm:gap-12 sm:px-12 sm:py-12 lg:grid-cols-[0.9fr_1.1fr]">
+          <CardHeader className="px-0 text-center lg:text-left">
             <CardTitle className="font-serif text-[clamp(2rem,4.4vw,3rem)] leading-[1.05] font-bold text-[#e8ecf1]">Start your free plan</CardTitle>
-            <CardDescription className="mt-3 max-w-sm text-base">Create an account and set up your profile. Your first workout plan is ready the moment you finish.</CardDescription>
+            <CardDescription className="mx-auto mt-3 max-w-sm text-base lg:mx-0">Create an account and set up your profile. Your first workout plan is ready the moment you finish.</CardDescription>
           </CardHeader>
           <CardContent className="px-0">
             {authenticated ? (
@@ -440,11 +447,11 @@ export default function Landing() {
       </section>
 
       {/* ---------- Footer ---------- */}
-      <div className="divider-wood" />
-      <footer className="py-14 text-center">
+      <div className="divider-gem" />
+      <footer className="landing-footer py-16 text-center">
         <Wordmark large />
-        <p className="mt-3 text-sm text-[#919dab]">Train smarter, every rep.</p>
-        <div className="mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-4 border-t border-border px-5 pt-6 text-xs text-[#818a98] sm:flex-row sm:px-8">
+        <p className="mt-3 text-sm text-[#a3b3c7]">Train smarter, every rep.</p>
+        <div className="mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-4 border-t border-white/10 px-5 pt-6 text-xs text-[#a3b3c7] sm:flex-row sm:px-8">
           <span>© {new Date().getFullYear()} ARIZE. All rights reserved.</span>
           <span className="flex items-center gap-2"><Icon icon={WebcamIcon} size={14} /> Video stays on your device</span>
           <span>Photos: Unsplash</span>

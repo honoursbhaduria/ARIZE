@@ -15,9 +15,9 @@ const buttonVariants = cva(
         link: 'text-primary underline-offset-4 hover:underline',
         // boot.dev-style call to action: dark gold fill, 2px border, glow, serif caps
         quest:
-          "shimmer rounded-xs border-2 border-gold-deep bg-gold-ink font-serif font-bold tracking-[0.12em] text-[#fde9b0] uppercase shadow-[0_0_24px_-4px_rgba(239,187,3,0.5)] hover:brightness-110 hover:shadow-[0_0_32px_-2px_rgba(239,187,3,0.6)]",
+          "shimmer btn-texture rounded-xs border-2 border-gold-deep bg-gold-ink font-serif font-bold tracking-[0.12em] text-[#fde9b0] uppercase shadow-[0_0_24px_-4px_rgba(239,187,3,0.5)] hover:brightness-110 hover:shadow-[0_0_32px_-2px_rgba(239,187,3,0.6)]",
         questGhost:
-          "shimmer rounded-xs border-2 border-[#4e5564] bg-transparent font-serif font-bold tracking-[0.12em] text-[#e8ecf1] uppercase hover:border-[#818a98]",
+          "shimmer btn-texture rounded-xs border-2 border-[#4e5564] bg-[#181b26] font-serif font-bold tracking-[0.12em] text-[#e8ecf1] uppercase hover:border-[#818a98]",
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

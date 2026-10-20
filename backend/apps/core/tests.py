@@ -114,3 +114,32 @@ class ProfileTests(TestCase):
         response = self.client.put('/api/profile/', {'age': None, 'weight': None, 'goal': 'fat_loss'}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()['age'])
+
+
+class RaceConditionTests(TestCase):
+    """Simulate the 'another request created it first' race deterministically."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_get_or_create_safely_returns_existing_row_after_integrity_error(self):
+        from django.db import IntegrityError
+        from .views import get_or_create_safely
+
+        user = User.objects.create_user('race', 'race@example.com', 'pw-123456')
+        with mock.patch.object(User.objects, 'get_or_create', side_effect=IntegrityError('duplicate')):
+            found, created = get_or_create_safely(User, username='race')
+        self.assertEqual(found, user)
+        self.assertFalse(created)
+
+    def test_signup_collision_returns_400_not_500(self):
+        from django.db import IntegrityError
+
+        with mock.patch('apps.core.serializers.SignupSerializer.save', side_effect=IntegrityError('duplicate')):
+            response = self.client.post('/api/auth/signup/', {'username': 'twin', 'email': 'twin@example.com', 'password': 'Sturdy-pass-2026'}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_demo_login_is_idempotent_and_keeps_one_account(self):
+        ids = {self.client.post('/api/auth/demo/', {}, format='json').json()['user']['id'] for _ in range(3)}
+        self.assertEqual(len(ids), 1)
+        self.assertEqual(User.objects.filter(username='demo_user').count(), 1)

@@ -137,7 +137,7 @@ export default function Dashboard() {
               <ProgressBar value={stats.progressPct} label="Level progress" />
             </div>
           </div>
-          <div className="stack-sm" style={{ minWidth: 'min(100%, 220px)' }}>
+          <div className="stack-sm hero-actions" style={{ minWidth: 'min(100%, 220px)' }}>
             <Link to="/counter" className="btn btn--primary btn--lg btn--block">
               <Swords size={20} /> Start workout
             </Link>
@@ -298,7 +298,10 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader icon={Activity} tone="violet" title="Sessions this week" />
-            <div className="row" style={{ alignItems: 'flex-end', height: 110, gap: 6 }}>
+            {week.every((day) => day.count === 0) && (
+              <p className="small muted" style={{ marginBottom: 12 }}>No sessions yet this week. Each saved Workout Coach set adds a bar here.</p>
+            )}
+            <div className="row" style={{ alignItems: 'flex-end', height: week.some((day) => day.count) ? 110 : 24, gap: 6 }}>
               {week.map((day) => (
                 <div
                   key={day.key}

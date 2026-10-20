@@ -76,13 +76,13 @@ a.avatar:hover { border-color: var(--gold); }
 
 .level-pill {
   display: inline-flex; align-items: center; gap: 4px;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--gold);
 }
 
 .nav-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
-.nav-group__title { padding: 6px 10px; font-family: var(--font-display); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim); }
+.nav-group__title { padding: 6px 10px; font-family: var(--font-body); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim); }
 
 .nav-link {
   display: flex; align-items: center; gap: 12px;
@@ -150,7 +150,7 @@ a.avatar:hover { border-color: var(--gold); }
 
 .tab {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-dim);
   -webkit-tap-highlight-color: transparent;

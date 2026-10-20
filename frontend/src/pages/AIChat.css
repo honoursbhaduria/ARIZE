@@ -9,14 +9,24 @@
 
 @media (max-width: 1023px) {
   /* The top bar already says "AI Coach", so the big page header only costs space. */
-  .chat-page { padding-top: 12px; gap: 14px; }
-  .chat-page > .page-header { display: none; }
+  .chat-page { padding-top: 6px; gap: 14px; }
+  .chat-page > .page-header {
+    /* visually hidden but still announced by screen readers */
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap;
+  }
 
+  /* Edge-to-edge chat that exactly fills the space between top bar and tab bar */
+  .chat-page { padding-left: 0; padding-right: 0; }
+  .chat-page > .split > .stack { padding: 0 var(--gutter); }
   .chat-card {
-    height: calc(100dvh - var(--hud-h) - var(--bottom-nav-h) - 28px - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--hud-h) - var(--bottom-nav-h) - 12px - env(safe-area-inset-bottom));
     min-height: 360px;
     padding: 12px;
     gap: 10px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
   }
 
   .chat-card .bubble { max-width: 88%; font-size: 0.93rem; padding: 10px 14px; }
@@ -27,8 +37,10 @@
   .chat-prompts {
     flex-wrap: nowrap;
     overflow-x: auto;
-    margin: 0 -12px;
-    padding: 0 12px 4px;
+    padding-bottom: 4px;
+    /* fade the edge so cut-off chips read as "swipe for more" */
+    mask-image: linear-gradient(90deg, #000 85%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }

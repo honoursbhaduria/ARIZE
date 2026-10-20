@@ -47,6 +47,9 @@
   --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
+  /* Film grain (SVG fractal noise) layered on cards */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
   /* Layout */
   --sidebar-w: 248px;
   --hud-h: 64px;
@@ -166,7 +169,7 @@ body::before {
 
 /* ---------- Typography helpers ---------- */
 .eyebrow {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -243,7 +246,10 @@ body::before {
 
 /* ---------- Cards ---------- */
 .card {
-  background: var(--surface);
+  /* fine film grain over the card colour */
+  background-color: var(--surface);
+  background-image: var(--grain);
+  background-size: 160px 160px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
@@ -254,10 +260,10 @@ body::before {
 @media (max-width: 480px) { .card { padding: 16px; border-radius: var(--radius); } }
 
 .card--flush { padding: 0; overflow: hidden; }
-.card--gold { border-color: rgba(193, 133, 0, 0.7); background: rgba(42, 28, 12, 0.55); }
-.card--violet { border-color: rgba(17, 103, 174, 0.8); background: rgba(4, 27, 46, 0.55); }
-.card--green { border-color: rgba(13, 181, 67, 0.6); background: rgba(4, 50, 18, 0.5); }
-.card--red { border-color: rgba(168, 16, 18, 0.8); background: rgba(46, 4, 5, 0.55); }
+.card--gold { border-color: rgba(193, 133, 0, 0.7); background-color: rgba(42, 28, 12, 0.55); }
+.card--violet { border-color: rgba(17, 103, 174, 0.8); background-color: rgba(4, 27, 46, 0.55); }
+.card--green { border-color: rgba(13, 181, 67, 0.6); background-color: rgba(4, 50, 18, 0.5); }
+.card--red { border-color: rgba(168, 16, 18, 0.8); background-color: rgba(46, 4, 5, 0.55); }
 .card--interactive { transition: transform 0.2s var(--ease), border-color 0.2s, box-shadow 0.2s; }
 .card--interactive:hover { transform: translateY(-3px); border-color: var(--border-strong); box-shadow: 0 18px 40px -20px rgba(139, 108, 255, 0.5); }
 
@@ -307,7 +313,12 @@ body::before {
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--btn-fg);
-  background: var(--btn-bg);
+  /* boot.dev's stone tile, overlay-blended so each button keeps its colour */
+  background-color: var(--btn-bg);
+  background-image: url('/textures/smalltexturestone.webp');
+  background-size: cover;
+  background-position: center;
+  background-blend-mode: overlay;
   border: 2px solid var(--btn-border);
   box-shadow: 0 0 22px -4px var(--btn-glow);
   transition: transform 0.08s ease, box-shadow 0.2s ease, filter 0.15s, border-color 0.15s;
@@ -340,7 +351,7 @@ body::before {
 .btn--violet { --btn-bg: #041b2e; --btn-border: #1586e1; --btn-glow: rgba(66, 160, 237, 0.45); --btn-fg: #d7ebfb; }
 .btn--green { --btn-bg: #043212; --btn-border: #0db543; --btn-glow: rgba(65, 241, 121, 0.4); --btn-fg: #d4fbe1; }
 .btn--danger { --btn-bg: #2e0405; --btn-border: #cd1316; --btn-glow: rgba(237, 66, 69, 0.4); --btn-fg: #fcd9da; }
-.btn--ghost { --btn-bg: transparent; --btn-border: var(--border-strong); }
+.btn--ghost { --btn-bg: #181b26; --btn-border: var(--border-strong); }
 .btn--ghost::after { opacity: 0.5; }
 .btn--sm { min-height: 36px; padding: 0 14px; font-size: 0.82rem; }
 .btn--lg { min-height: 56px; padding: 0 32px; font-size: 1.08rem; }
@@ -363,7 +374,7 @@ body::before {
 /* ---------- Forms ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .label {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -407,7 +418,7 @@ body::before {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.08em; text-transform: uppercase;
   background: var(--surface-2);
@@ -454,12 +465,23 @@ body::before {
 /* ---------- Stats ---------- */
 .stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .stat__value { font-family: var(--font-mono); font-size: clamp(1.4rem, 3.6vw, 1.9rem); font-weight: 700; line-height: 1.1; }
-.stat__label { font-family: var(--font-display); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+.stat__label { font-family: var(--font-body); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
 .stat__hint { font-size: 0.8rem; color: var(--text-dim); }
 
 .stat-card { display: flex; align-items: center; gap: 14px; }
-@media (max-width: 420px) {
-  .stat-card { flex-direction: column; align-items: flex-start; gap: 10px; }
+@media (max-width: 480px) {
+  .stat-card { gap: 10px; padding: 14px; }
+  .stat-card .icon-tile { width: 34px; height: 34px; border-radius: 8px; }
+  .stat-card .icon-tile svg { width: 17px; height: 17px; }
+  .stat-card .stat__value { font-size: 1.25rem; }
+}
+
+/* Title keeps its width; header actions wrap underneath on narrow cards */
+.card-header > .row { flex: 1 1 220px; }
+
+/* Full-width hero actions on phones */
+@media (max-width: 640px) {
+  .hero-actions { width: 100%; }
 }
 
 /* ---------- Lists ---------- */

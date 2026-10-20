@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import httpx
 
+from django.db import IntegrityError
 from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -98,8 +99,12 @@ class SignupView(APIView):
     def post(self, request):
         serializer = SignupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        NotificationPreference.objects.get_or_create(user=user)
+        try:
+            user = serializer.save()
+        except IntegrityError:
+            # Another request registered the same username/email a moment earlier.
+            return Response({'detail': 'A user with that username or email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        ensure_user_records(user)
         refresh = RefreshToken.for_user(user)
         return Response(
             {
@@ -139,8 +144,7 @@ class LoginView(APIView):
         if not user.is_active:
             return Response({'detail': 'This account is inactive.'}, status=status.HTTP_403_FORBIDDEN)
 
-        UserProfile.objects.get_or_create(user=user)
-        NotificationPreference.objects.get_or_create(user=user)
+        ensure_user_records(user)
 
         refresh = RefreshToken.for_user(user)
         return Response(
@@ -149,6 +153,19 @@ class LoginView(APIView):
                 'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)},
             }
         )
+
+
+def get_or_create_safely(model, defaults=None, **lookup):
+    """get_or_create that survives two requests creating the same row at once."""
+    try:
+        return model.objects.get_or_create(defaults=defaults, **lookup)
+    except IntegrityError:
+        return model.objects.get(**lookup), False
+
+
+def ensure_user_records(user):
+    get_or_create_safely(UserProfile, user=user)
+    get_or_create_safely(NotificationPreference, user=user)
 
 
 def get_or_create_user_by_email(email, preferred_username=''):
@@ -203,8 +220,7 @@ class SupabaseLoginView(APIView):
         if not user.is_active:
             return Response({'detail': 'This account is inactive.'}, status=status.HTTP_403_FORBIDDEN)
 
-        UserProfile.objects.get_or_create(user=user)
-        NotificationPreference.objects.get_or_create(user=user)
+        ensure_user_records(user)
 
         refresh = RefreshToken.for_user(user)
         return Response(
@@ -222,23 +238,20 @@ class DemoLoginView(APIView):
         demo_username = 'demo_user'
         demo_email = 'demo@arize.ai'
 
-        user = User.objects.filter(username=demo_username).first()
+        user = User.objects.filter(username=demo_username).first() or User.objects.filter(email=demo_email).first()
         if not user:
-            user = User.objects.filter(email=demo_email).first()
-
-        if not user:
-            user = User.objects.create_user(username=demo_username, email=demo_email)
+            user, _ = get_or_create_safely(User, username=demo_username, defaults={'email': demo_email})
         # Demo access is password-less; never leave a guessable password on the account.
-        user.set_unusable_password()
-        user.save()
+        if user.has_usable_password():
+            user.set_unusable_password()
+            user.save(update_fields=['password'])
 
-        profile, _ = UserProfile.objects.get_or_create(user=user)
-        if not profile.goal:
-            profile.goal = 'muscle_gain'
-        profile.streak_days = max(profile.streak_days, 7)
-        profile.save()
-
-        NotificationPreference.objects.get_or_create(user=user)
+        profile, created = get_or_create_safely(UserProfile, user=user)
+        if created or not profile.goal or profile.streak_days < 7:
+            profile.goal = profile.goal or 'muscle_gain'
+            profile.streak_days = max(profile.streak_days, 7)
+            profile.save(update_fields=['goal', 'streak_days'])
+        get_or_create_safely(NotificationPreference, user=user)
 
         refresh = RefreshToken.for_user(user)
         return Response(

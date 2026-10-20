@@ -183,8 +183,8 @@ export default function AIChat() {
         <div className="stack">
           <BmiCard weight={profile.data?.weight} showCategories />
 
-          <Card tone="red">
-            <CardHeader icon={Heart} tone="red" title="Medical intelligence" />
+          <Card>
+            <CardHeader icon={Heart} title="Medical intelligence" />
             <p className="small muted" style={{ marginBottom: 14 }}>
               Upload blood tests, scans or prescriptions. The coach analyses them and uses the insights in future answers.
             </p>
