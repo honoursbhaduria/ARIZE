@@ -167,28 +167,6 @@ def get_or_create_user_by_email(email, preferred_username=''):
     return user
 
 
-class GoogleLoginView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        email = (request.data.get('email') or '').strip().lower()
-        if not email:
-            return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = get_or_create_user_by_email(email)
-
-        UserProfile.objects.get_or_create(user=user)
-        NotificationPreference.objects.get_or_create(user=user)
-
-        refresh = RefreshToken.for_user(user)
-        return Response(
-            {
-                'user': {'id': user.id, 'username': user.username, 'email': user.email},
-                'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)},
-            }
-        )
-
-
 class SupabaseLoginView(APIView):
     """Exchange a verified Supabase session for this API's JWT pair."""
     permission_classes = [permissions.AllowAny]
@@ -197,6 +175,9 @@ class SupabaseLoginView(APIView):
         access_token = (request.data.get('access_token') or '').strip()
         if not access_token:
             return Response({'detail': 'Supabase access token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
+            return Response({'detail': 'Supabase sign-in is not configured on the server.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         try:
             sb_response = httpx.get(
@@ -244,14 +225,10 @@ class DemoLoginView(APIView):
             user = User.objects.filter(email=demo_email).first()
 
         if not user:
-            user = User.objects.create_user(
-                username=demo_username,
-                email=demo_email,
-                password='demopassword123',
-            )
-        else:
-            user.set_password('demopassword123')
-            user.save()
+            user = User.objects.create_user(username=demo_username, email=demo_email)
+        # Demo access is password-less; never leave a guessable password on the account.
+        user.set_unusable_password()
+        user.save()
 
         profile, _ = UserProfile.objects.get_or_create(user=user)
         if not profile.goal:

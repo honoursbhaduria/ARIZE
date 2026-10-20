@@ -1112,8 +1112,6 @@ def mood_playlist(mood: str):
             os.getenv('YOUTUBE_API_KEY', '').strip(),
             os.getenv('YOUTUBE_DATA_API_KEY', '').strip(),
             os.getenv('YOUTUBE_API_KEY_BACKUP', '').strip(),
-            # User-provided backup key, used only if primary keys fail/exhaust.
-            'AIzaSyClasOt0JOTrL-K656j2nARcOXWa1f4jO4',
         ]
 
         unique = []

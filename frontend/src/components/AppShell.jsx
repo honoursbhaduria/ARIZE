@@ -8,12 +8,10 @@ import './AppShell.css'
 
 export default function AppShell({ children }) {
   const location = useLocation()
-  const [navOpen, setNavOpen] = useState(false)
-
-  // Close the mobile drawer whenever the route changes
-  useEffect(() => {
-    setNavOpen(false)
-  }, [location.pathname])
+  // Drawer is open only for the path it was opened on, so navigating closes it.
+  const [navOpenPath, setNavOpenPath] = useState(null)
+  const navOpen = navOpenPath === location.pathname
+  const setNavOpen = (open) => setNavOpenPath(open ? location.pathname : null)
 
   useEffect(() => {
     let mounted = true

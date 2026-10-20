@@ -14,8 +14,12 @@ PROJECT_ROOT = BASE_DIR.parent
 load_dotenv(BASE_DIR / '.env')
 load_dotenv(PROJECT_ROOT / '.env')
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-secret-change-me')
 DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise RuntimeError('DJANGO_SECRET_KEY must be set when DJANGO_DEBUG=0')
+    SECRET_KEY = 'dev-only-insecure-secret-key-do-not-use-in-production'
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')]
 
 # In local development, allow LAN/IP testing without manual host updates.
@@ -25,8 +29,8 @@ if DEBUG:
 
 # AI API Configuration
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
-SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://phpmpjymtujvjevlogng.supabase.co')
-SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', 'sb_publishable_1pz6dMTneFqL1eLr8jOI8g_dw34k1LT')
+SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '')
 
 INSTALLED_APPS = [
     'django.contrib.admin',

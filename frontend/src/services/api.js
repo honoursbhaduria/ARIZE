@@ -45,11 +45,7 @@ export function clearAuthSession() {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
-  try {
-    supabase.auth.signOut().catch(() => {})
-  } catch {
-    // ignore
-  }
+  supabase?.auth.signOut().catch(() => {})
 }
 
 export function getCurrentUser() {
@@ -187,17 +183,6 @@ export function registerUser(payload) {
   })
 }
 
-export function loginWithGoogle(email) {
-  return request('/auth/google/', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-    skipAuth: true,
-  }).then((response) => {
-    setAuthSession(response)
-    return response
-  })
-}
-
 export function loginAsDemo() {
   return request('/auth/demo/', {
     method: 'POST',
@@ -211,6 +196,13 @@ export function loginAsDemo() {
 
 // Supabase tokens are not accepted by the backend, so every Supabase session
 // is exchanged for the backend's own JWT pair before it is stored.
+function requireSupabase() {
+  if (!supabase) {
+    throw new Error('Supabase sign-in is not configured.')
+  }
+  return supabase
+}
+
 export function exchangeSupabaseSession(session) {
   return request('/auth/supabase/', {
     method: 'POST',
@@ -223,7 +215,7 @@ export function exchangeSupabaseSession(session) {
 }
 
 export async function supabaseLogin({ email, password }) {
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await requireSupabase().auth.signInWithPassword({
     email,
     password,
   })
@@ -237,7 +229,7 @@ export async function supabaseLogin({ email, password }) {
 
 // Returns the Supabase session, or null when email confirmation is required.
 export async function supabaseRegister({ email, password, username }) {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await requireSupabase().auth.signUp({
     email,
     password,
     options: {
@@ -255,7 +247,7 @@ export async function supabaseRegister({ email, password, username }) {
 }
 
 export async function supabaseGoogleLogin() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  const { data, error } = await requireSupabase().auth.signInWithOAuth({
     provider: 'google',
     options: {
       // Login page picks up the returned session and exchanges it.
@@ -272,6 +264,9 @@ export async function supabaseGoogleLogin() {
 
 // Completes an OAuth redirect: exchanges any pending Supabase session.
 export async function completeSupabaseRedirect() {
+  if (!supabase) {
+    return null
+  }
   const { data } = await supabase.auth.getSession()
   if (!data?.session) {
     return null

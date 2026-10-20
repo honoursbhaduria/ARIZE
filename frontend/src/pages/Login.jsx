@@ -4,7 +4,6 @@ import { motion } from 'framer-motion'
 import { Dumbbell, AlertCircle, Mail, ArrowLeft, Eye, EyeOff, Sparkles, LogIn } from 'lucide-react'
 import {
   loginUser,
-  loginWithGoogle,
   loginAsDemo,
   supabaseLogin,
   supabaseGoogleLogin,
@@ -18,8 +17,6 @@ export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [googleEmail, setGoogleEmail] = useState('')
-  const [showGoogleInput, setShowGoogleInput] = useState(false)
   const [loading, setLoading] = useState(false)
   const [demoLoading, setDemoLoading] = useState(false)
   const [error, setError] = useState('')
@@ -82,33 +79,16 @@ export default function Login() {
     }
   }
 
-  const handleGoogleLogin = async (event) => {
-    if (event) event.preventDefault()
+  const handleGoogleLogin = async () => {
     setLoading(true)
     setError('')
 
     try {
-      // Attempt Supabase Google OAuth
+      // Redirects to Google; the session is exchanged when we land back on /login.
       await supabaseGoogleLogin()
-    } catch (sbErr) {
-      console.warn('Supabase OAuth notice:', sbErr.message)
-      // Fallback: email-based Google login bridge
-      const emailToUse = googleEmail.trim() || (username.includes('@') ? username.trim() : '')
-      if (!emailToUse) {
-        setShowGoogleInput(true)
-        setError('Please enter your Google email address below to continue.')
-        setLoading(false)
-        return
-      }
-
-      try {
-        await loginWithGoogle(emailToUse)
-        navigate('/dashboard')
-      } catch (err) {
-        setError(err.message || 'Google sign-in unavailable.')
-      } finally {
-        setLoading(false)
-      }
+    } catch (err) {
+      setError(err.message || 'Google sign-in unavailable.')
+      setLoading(false)
     }
   }
 
@@ -236,32 +216,15 @@ export default function Login() {
 
           <div className="auth-divider">or continue with</div>
 
-          <form className="auth-google-form" onSubmit={handleGoogleLogin}>
-            {showGoogleInput && (
-              <div className="auth-input-group">
-                <input
-                  className="auth-input"
-                  value={googleEmail}
-                  onChange={(event) => {
-                    setGoogleEmail(event.target.value)
-                    if (error) setError('')
-                  }}
-                  placeholder="Enter your google email"
-                  type="email"
-                  autoFocus
-                />
-              </div>
-            )}
-            <button
-              className="btn-google"
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={loading || demoLoading}
-            >
-              <Mail size={18} />
-              <span>Continue with Google</span>
-            </button>
-          </form>
+          <button
+            className="btn-google"
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || demoLoading}
+          >
+            <Mail size={18} />
+            <span>Continue with Google</span>
+          </button>
 
           {error && (
             <div className="auth-error-msg">
