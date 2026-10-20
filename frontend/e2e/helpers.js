@@ -15,7 +15,7 @@ export async function signupViaApi(request, user = uniqueUser()) {
 }
 
 // Store a backend session the same way the app does after login.
-export async function useSession(page, session) {
+export async function applySession(page, session) {
   await page.goto('/')
   await page.evaluate((s) => {
     localStorage.setItem('bt_access_token', s.tokens.access)
@@ -26,7 +26,7 @@ export async function useSession(page, session) {
 
 export async function signedInPage(page, request, prefix) {
   const { user, session } = await signupViaApi(request, uniqueUser(prefix))
-  await useSession(page, session)
+  await applySession(page, session)
   return { user, session }
 }
 

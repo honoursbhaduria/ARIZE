@@ -26,4 +26,10 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]|motion', argsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Playwright specs and tool configs run in Node, not the browser.
+    files: ['e2e/**/*.js', '*.config.js'],
+    languageOptions: { globals: globals.node },
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
+  },
 ])
