@@ -16,6 +16,7 @@ export default function MusicProvider({ children }) {
   const [queue, setQueue] = useState([])
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [buffering, setBuffering] = useState(false) // waiting for the stream to start
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [time, setTime] = useState({ current: 0, duration: 0 })
@@ -60,6 +61,7 @@ export default function MusicProvider({ children }) {
     if (audio.dataset.trackId !== track.id) {
       audio.dataset.trackId = track.id
       audio.src = track.stream_url
+      setBuffering(true)
       setTime({ current: 0, duration: track.duration || 0 })
     }
     if (playing) {
@@ -104,6 +106,7 @@ export default function MusicProvider({ children }) {
     index,
     track,
     playing,
+    buffering: buffering && playing,
     loading,
     error,
     time,
@@ -122,7 +125,7 @@ export default function MusicProvider({ children }) {
       if (audioRef.current) audioRef.current.currentTime = seconds
     },
     setVolume: setVolumeState,
-  }), [mood, playlistName, queue, index, track, playing, loading, error, time, volume, playMood, playTracks, next, previous, stop])
+  }), [mood, playlistName, queue, index, track, playing, buffering, loading, error, time, volume, playMood, playTracks, next, previous, stop])
 
   const onMusicPage = pathname.startsWith('/music')
 
@@ -139,7 +142,11 @@ export default function MusicProvider({ children }) {
         preload="none"
         onTimeUpdate={(e) => setTime({ current: e.currentTarget.currentTime, duration: e.currentTarget.duration || track?.duration || 0 })}
         onEnded={next}
-        onPlaying={() => { failuresRef.current = 0 }}
+        onWaiting={() => setBuffering(true)}
+        onPlaying={() => {
+          failuresRef.current = 0
+          setBuffering(false)
+        }}
         onError={() => {
           if (!track) return
           failuresRef.current += 1
@@ -158,10 +165,10 @@ export default function MusicProvider({ children }) {
           <TrackArt key={track.id} src={track.artwork} className="music-bar__art" />
           <Link to="/music" className="music-bar__text">
             <span className="truncate music-bar__title">{track.title}</span>
-            <span className="truncate tiny muted">{track.artist}</span>
+            <span className="truncate tiny muted">{buffering && playing ? 'Loading…' : track.artist}</span>
           </Link>
           <button type="button" className="icon-btn" onClick={value.toggle} aria-label={playing ? 'Pause music' : 'Play music'}>
-            {playing ? <Pause size={18} /> : <Play size={18} />}
+            {buffering && playing ? <span className="spinner" /> : playing ? <Pause size={18} /> : <Play size={18} />}
           </button>
           <button type="button" className="icon-btn" onClick={next} aria-label="Next track"><SkipForward size={18} /></button>
           <button type="button" className="icon-btn" onClick={stop} aria-label="Stop music"><X size={18} /></button>

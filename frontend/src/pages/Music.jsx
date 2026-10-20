@@ -27,7 +27,7 @@ const clock = (seconds) => {
 
 export default function Music() {
   const music = useMusic()
-  const { track, playing, loading, error, time, queue, index } = music
+  const { track, playing, buffering, loading, error, time, queue, index } = music
   const upNext = queue.slice(index + 1, index + 6)
   const [term, setTerm] = useState('')
   const [submitted, setSubmitted] = useState('')
@@ -66,7 +66,7 @@ export default function Music() {
           <div className="player__top">
             <TrackArt key={track.id} src={track.artwork} className="player__art" iconSize={30} />
             <div className="player__meta">
-              <span className="eyebrow">{playing ? 'Now playing' : 'Paused'} · {music.playlistName}</span>
+              <span className="eyebrow">{buffering ? 'Loading track…' : playing ? 'Now playing' : 'Paused'} · {music.playlistName}</span>
               <strong className="player__title">{track.title}</strong>
               <span className="small muted truncate">by {track.artist}</span>
             </div>
@@ -92,7 +92,7 @@ export default function Music() {
             <button type="button" className="icon-btn player__btn" onClick={music.stop} aria-label="Stop"><Square size={18} /></button>
             <button type="button" className="icon-btn player__btn" onClick={music.previous} aria-label="Previous track"><SkipBack size={20} /></button>
             <button type="button" className="player__play" onClick={music.toggle} aria-label={playing ? 'Pause' : 'Play'}>
-              {playing ? <Pause size={24} /> : <Play size={24} />}
+              {buffering ? <span className="spinner" /> : playing ? <Pause size={24} /> : <Play size={24} />}
             </button>
             <button type="button" className="icon-btn player__btn" onClick={music.next} aria-label="Next track"><SkipForward size={20} /></button>
             <button type="button" className="icon-btn player__btn" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
