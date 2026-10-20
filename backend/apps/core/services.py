@@ -1,12 +1,16 @@
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import urllib.parse
+import random
+import time
 import os
 import base64
 import io
 import re
 import ssl
 from urllib.request import Request, urlopen
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import certifi
 from PIL import Image
@@ -745,13 +749,14 @@ Provide:
 
 
 # Food nutrition database (common foods)
+# All values are per 100 g.
 FOOD_DATABASE = {
     'chicken breast': {'calories': 165, 'protein': 31, 'carbs': 0, 'fats': 3.6},
     'chicken': {'calories': 239, 'protein': 27, 'carbs': 0, 'fats': 14},
     'rice': {'calories': 130, 'protein': 2.7, 'carbs': 28, 'fats': 0.3},
     'brown rice': {'calories': 112, 'protein': 2.6, 'carbs': 24, 'fats': 0.9},
-    'egg': {'calories': 78, 'protein': 6, 'carbs': 0.6, 'fats': 5},
-    'eggs': {'calories': 156, 'protein': 12, 'carbs': 1.2, 'fats': 10},
+    'egg': {'calories': 155, 'protein': 13, 'carbs': 1.1, 'fats': 11},
+    'eggs': {'calories': 155, 'protein': 13, 'carbs': 1.1, 'fats': 11},
     'banana': {'calories': 89, 'protein': 1.1, 'carbs': 23, 'fats': 0.3},
     'apple': {'calories': 52, 'protein': 0.3, 'carbs': 14, 'fats': 0.2},
     'oatmeal': {'calories': 68, 'protein': 2.4, 'carbs': 12, 'fats': 1.4},
@@ -776,94 +781,92 @@ FOOD_DATABASE = {
     'peanut butter': {'calories': 588, 'protein': 25, 'carbs': 20, 'fats': 50},
     'bread': {'calories': 265, 'protein': 9, 'carbs': 49, 'fats': 3.2},
     'pasta': {'calories': 131, 'protein': 5, 'carbs': 25, 'fats': 1.1},
-    'whey protein': {'calories': 120, 'protein': 24, 'carbs': 3, 'fats': 1.5},
-    'protein shake': {'calories': 150, 'protein': 25, 'carbs': 5, 'fats': 2},
+    'whey protein': {'calories': 400, 'protein': 80, 'carbs': 8, 'fats': 6},
+    'protein shake': {'calories': 60, 'protein': 10, 'carbs': 2, 'fats': 1},
     'avocado': {'calories': 160, 'protein': 2, 'carbs': 9, 'fats': 15},
     'olive oil': {'calories': 884, 'protein': 0, 'carbs': 0, 'fats': 100},
-    'coffee': {'calories': 2, 'protein': 0.3, 'carbs': 0, 'fats': 0},
+    'coffee': {'calories': 1, 'protein': 0.1, 'carbs': 0, 'fats': 0},
     'green tea': {'calories': 2, 'protein': 0, 'carbs': 0, 'fats': 0},
 }
 
 
-def nutrition_lookup(query: str):
-    """
-    Look up nutrition info from database or use AI for estimation.
-    """
-    query_lower = query.lower().strip()
+_QUANTITY_RE = re.compile(r'(\d+(?:\.\d+)?)\s*(?:g|gm|gms|gram|grams)\b', re.IGNORECASE)
 
-    # Ask Groq for calories-first result if available.
-    calorie_only = groq_calorie_lookup(query)
-    if calorie_only:
-        return calorie_only
 
-    # Check database first
-    for food, nutrition in FOOD_DATABASE.items():
-        if food in query_lower or query_lower in food:
-            return {
-                'food': query.title(),
-                'calories': nutrition['calories'],
-                'protein': nutrition['protein'],
-                'carbs': nutrition['carbs'],
-                'fats': nutrition['fats'],
-                'source': 'database'
-            }
+def parse_food_query(query: str):
+    """Split '200g chicken breast' into ('chicken breast', 200.0). Grams is None if not given."""
+    match = _QUANTITY_RE.search(query or '')
+    grams = float(match.group(1)) if match else None
+    food = _QUANTITY_RE.sub(' ', query or '')
+    food = re.sub(r'\b(of|a|an)\b', ' ', food, flags=re.IGNORECASE)
+    return ' '.join(food.split()), grams
 
-    # Use AI for unknown foods
-    prompt = f"""Estimate nutrition for 100g of: {query}
-Respond in this exact format (numbers only):
-Calories: [number]
-Protein: [number]g
-Carbs: [number]g
-Fats: [number]g"""
 
-    messages = [
-        {"role": "system", "content": "You are a nutrition database. Provide accurate estimates."},
-        {"role": "user", "content": prompt}
-    ]
+def _best_database_match(food_lower: str):
+    """Exact name first, then the longest database name inside the query, then the closest containing name."""
+    if food_lower in FOOD_DATABASE:
+        return food_lower
+    contained = [name for name in FOOD_DATABASE if re.search(rf'\b{re.escape(name)}\b', food_lower)]
+    if contained:
+        return max(contained, key=len)
+    containing = [name for name in FOOD_DATABASE if food_lower and food_lower in name]
+    return min(containing, key=len) if containing else None
 
-    response = groq_chat_completion(messages, model="llama-3.1-8b-instant")
 
-    if response:
-        try:
-            import re
-            lines = response.strip().split('\n')
-            nutrition = {'calories': 100, 'protein': 5, 'carbs': 10, 'fats': 5}
-
-            for line in lines:
-                numbers = re.findall(r'[\d.]+', line)
-                if numbers:
-                    value = float(numbers[0])
-                    line_lower = line.lower()
-                    if 'calorie' in line_lower:
-                        nutrition['calories'] = int(value)
-                    elif 'protein' in line_lower:
-                        nutrition['protein'] = round(value, 1)
-                    elif 'carb' in line_lower:
-                        nutrition['carbs'] = round(value, 1)
-                    elif 'fat' in line_lower:
-                        nutrition['fats'] = round(value, 1)
-
-            return {
-                'food': query.title(),
-                'calories': nutrition['calories'],
-                'protein': nutrition['protein'],
-                'carbs': nutrition['carbs'],
-                'fats': nutrition['fats'],
-                'source': 'ai_estimate'
-            }
-        except Exception:
-            pass
-
-    # Fallback estimation
-    seed = max(len(query), 5)
+def with_portion(food: str, per_100g: dict, grams: float, source: str):
+    """Build the API result: per-100 g reference values plus totals for the eaten amount."""
+    factor = grams / 100
+    per = {key: round(float(per_100g.get(key, 0)), 1) for key in ('calories', 'protein', 'carbs', 'fats')}
     return {
-        'food': query.title(),
-        'calories': 60 * seed,
-        'protein': round(seed * 1.8, 1),
-        'carbs': round(seed * 2.2, 1),
-        'fats': round(seed * 0.9, 1),
-        'source': 'estimate'
+        'food': food.title(),
+        'grams': round(grams, 1),
+        'per_100g': per,
+        'calories': round(per['calories'] * factor),
+        'protein': round(per['protein'] * factor, 1),
+        'carbs': round(per['carbs'] * factor, 1),
+        'fats': round(per['fats'] * factor, 1),
+        'source': source,
     }
+
+
+def nutrition_lookup(query: str, grams: float = None):
+    """
+    Nutrition for an amount of food. Values are looked up per 100 g (AI, then the
+    built-in table, then an AI estimate) and scaled to `grams` (or an amount written
+    in the query like '200g rice'; default 100 g). Returns None if nothing is known.
+    """
+    food, parsed_grams = parse_food_query(query)
+    grams = grams or parsed_grams or 100
+    if not food:
+        return None
+
+    ai = groq_calorie_lookup(food)
+    if ai:
+        return with_portion(food, ai, grams, 'groq')
+
+    match = _best_database_match(food.lower())
+    if match:
+        return with_portion(match, FOOD_DATABASE[match], grams, 'database')
+
+    response = groq_chat_completion([
+        {"role": "system", "content": "You are a nutrition database. Provide accurate estimates."},
+        {"role": "user", "content": f"Estimate nutrition for 100g of: {food}\nRespond in this exact format (numbers only):\nCalories: [number]\nProtein: [number]g\nCarbs: [number]g\nFats: [number]g"},
+    ], model="llama-3.1-8b-instant")
+    if response:
+        per = {}
+        for line in response.strip().split('\n'):
+            numbers = re.findall(r'[\d.]+', line)
+            if not numbers:
+                continue
+            lower = line.lower()
+            for key, word in (('calories', 'calor'), ('protein', 'protein'), ('carbs', 'carb'), ('fats', 'fat')):
+                if word in lower:
+                    per[key] = float(numbers[0])
+        if per.get('calories'):
+            return with_portion(food, per, grams, 'ai_estimate')
+
+    # Unknown food: say so rather than inventing numbers.
+    return None
 
 
 def groq_calorie_lookup(query: str):
@@ -1105,6 +1108,105 @@ def consistency_feedback(missed_workouts: int, previous_score: int, current_scor
     ]
 
 
+# ---------- Audius (free, open music streaming; no API key) ----------
+AUDIUS_APP_NAME = 'ARIZE'
+AUDIUS_MOOD_QUERIES = {
+    'cardio': ['cardio workout', 'running music', 'edm workout'],
+    'strength': ['gym workout', 'gym motivation', 'hip hop workout'],
+    'hiit': ['hiit workout', 'high energy edm', 'workout mix'],
+    'relax': ['chill lofi', 'ambient chill', 'lofi beats'],
+    'yoga': ['yoga music', 'meditation', 'ambient relaxing'],
+}
+AUDIUS_MOOD_TITLES = {
+    'cardio': 'Cardio Pulse', 'strength': 'Heavy Lift Drive', 'hiit': 'HIIT Fuel',
+    'relax': 'Recovery Lo-fi', 'yoga': 'Yoga Flow',
+}
+_AUDIUS_HOST = {'url': None, 'at': 0.0}
+_AUDIUS_MOOD_CACHE = {}  # mood -> (fetched_at, tracks)
+
+
+def _audius_host():
+    """Discovery: api.audius.co lists healthy API hosts; reuse one for 10 minutes."""
+    now = time.time()
+    if _AUDIUS_HOST['url'] and now - _AUDIUS_HOST['at'] < 600:
+        return _AUDIUS_HOST['url']
+    with _open_url_with_ssl(Request('https://api.audius.co', headers={'User-Agent': WIKIPEDIA_USER_AGENT}), timeout=6) as res:
+        hosts = json.loads(res.read().decode('utf-8')).get('data') or []
+    if not hosts:
+        raise RuntimeError('No Audius hosts available')
+    _AUDIUS_HOST.update(url=hosts[0].rstrip('/'), at=now)
+    return _AUDIUS_HOST['url']
+
+
+def _audius_search(host: str, query: str, limit: int):
+    url = f"{host}/v1/tracks/search?{urllib.parse.urlencode({'query': query, 'app_name': AUDIUS_APP_NAME, 'limit': limit})}"
+    try:
+        with _open_url_with_ssl(Request(url, headers={'User-Agent': WIKIPEDIA_USER_AGENT}), timeout=6) as res:
+            return json.loads(res.read().decode('utf-8')).get('data') or []
+    except Exception as exc:
+        print(f'Audius search error ({query}): {exc}')
+        return []
+
+
+def _audius_tracks(host: str, results, min_seconds: int = 60, seen=None):
+    """Keep streamable tracks of a sensible length and shape them for the frontend."""
+    seen = set() if seen is None else seen
+    tracks = []
+    for item in results:
+        duration = int(item.get('duration') or 0)
+        if item.get('id') in seen or item.get('is_streamable') is False or not min_seconds <= duration <= 3 * 3600:
+            continue
+        seen.add(item['id'])
+        artwork = item.get('artwork') or {}
+        tracks.append({
+            'id': item['id'],
+            'title': item.get('title') or 'Untitled',
+            'artist': (item.get('user') or {}).get('name') or 'Unknown artist',
+            'duration': duration,
+            'artwork': artwork.get('480x480') or artwork.get('150x150') or '',
+            'permalink': f"https://audius.co{item.get('permalink', '')}" if item.get('permalink') else 'https://audius.co',
+            'stream_url': f"{host}/v1/tracks/{item['id']}/stream?app_name={AUDIUS_APP_NAME}",
+        })
+    return tracks
+
+
+def audius_mood_tracks(mood: str, limit: int = 20):
+    """Full-length, streamable tracks for a workout mood, shuffled. Cached for 10 minutes."""
+    cached = _AUDIUS_MOOD_CACHE.get(mood)
+    if cached and time.time() - cached[0] < 600:
+        tracks = list(cached[1])
+        random.shuffle(tracks)
+        return tracks
+
+    host = _audius_host()
+    queries = AUDIUS_MOOD_QUERIES.get(mood, ['workout'])
+    with ThreadPoolExecutor(max_workers=len(queries)) as pool:  # searches in parallel
+        batches = list(pool.map(lambda q: _audius_search(host, q, limit), queries))
+    seen, tracks = set(), []
+    for results in batches:
+        tracks.extend(_audius_tracks(host, results, min_seconds=90, seen=seen))
+    if not tracks:
+        raise RuntimeError('No Audius tracks found')
+    _AUDIUS_MOOD_CACHE[mood] = (time.time(), list(tracks))
+    random.shuffle(tracks)
+    return tracks
+
+
+_AUDIUS_SEARCH_CACHE = {}  # query -> (fetched_at, tracks)
+
+
+def audius_search_tracks(query: str, limit: int = 20):
+    """Tracks matching a user's search (song, artist or genre), in Audius' relevance order."""
+    key = query.strip().lower()
+    cached = _AUDIUS_SEARCH_CACHE.get(key)
+    if cached and time.time() - cached[0] < 600:
+        return list(cached[1])
+    host = _audius_host()
+    tracks = _audius_tracks(host, _audius_search(host, query.strip(), limit))
+    if len(_AUDIUS_SEARCH_CACHE) < 500:
+        _AUDIUS_SEARCH_CACHE[key] = (time.time(), list(tracks))
+    return tracks
+
 def mood_playlist(mood: str):
     """Get workout playlist based on mood/workout type."""
     def get_youtube_api_keys():
@@ -1231,59 +1333,59 @@ def mood_playlist(mood: str):
     return map_data.get(mood.lower(), map_data['cardio'])
 
 
+# Wikimedia asks API clients to identify themselves; generic agents get throttled sooner.
+WIKIPEDIA_USER_AGENT = 'ARIZE-fitness/1.0 (https://github.com/honoursbhaduria/ARIZE)'
+_WIKI_SEARCH_CACHE = {}  # (query, limit) -> products; successful lookups only
+
+
 def search_wikipedia_products(product_name: str, limit: int = 5):
     """
     Search Wikipedia for health/nutrition products with images and info.
 
-    Args:
-        product_name: Name of the product to search (e.g., 'chicken', 'protein', 'vitamin')
-        limit: Number of results to return
-
-    Returns:
-        List of products with name, image, description, and Wikipedia URL
+    One request per search: generator=search returns titles, thumbnails,
+    intro extracts and URLs together (previously 1 search + 1 request per result,
+    which was slow and tripped Wikipedia's rate limit).
     """
+    key = ((product_name or '').strip().lower(), limit)
+    if key in _WIKI_SEARCH_CACHE:
+        return [dict(product) for product in _WIKI_SEARCH_CACHE[key]]
     try:
-        import urllib.request
-        import json
-
-        # Wikipedia API endpoint
-        api_url = "https://en.wikipedia.org/w/api.php"
+        import urllib.parse
 
         params = {
             'action': 'query',
-            'list': 'search',
-            'srsearch': product_name,
-            'srprop': 'snippet|titlesnippet',
-            'srlimit': limit,
-            'format': 'json'
+            'format': 'json',
+            'generator': 'search',
+            'gsrsearch': product_name,
+            'gsrlimit': limit,
+            'prop': 'pageimages|extracts|info',
+            'inprop': 'url',
+            'pithumbsize': '300',
+            'exintro': 1,
+            'explaintext': 1,
+            'exlimit': 'max',
+            'redirects': 1,
         }
-
-        # Build query string safely with URL encoding
-        import urllib.parse
-        query_str = urllib.parse.urlencode(params)
-        url = f"{api_url}?{query_str}"
-
-        # Make request
-        req = urllib.request.Request(url, headers={'User-Agent': 'BeastTrack/1.0'})
-        with _open_url_with_ssl(req, timeout=5) as response:
+        url = f"https://en.wikipedia.org/w/api.php?{urllib.parse.urlencode(params)}"
+        req = Request(url, headers={'User-Agent': WIKIPEDIA_USER_AGENT})
+        with _open_url_with_ssl(req, timeout=6) as response:
             data = json.loads(response.read().decode('utf-8'))
 
+        pages = sorted(data.get('query', {}).get('pages', {}).values(), key=lambda page: page.get('index', 0))
         products = []
-        for result in data.get('query', {}).get('search', [])[:limit]:
-            product_title = result['title']
-            product_snippet = result['snippet'].replace('<span class="searchmatch">', '').replace('</span>', '')[:200]
+        for page in pages[:limit]:
+            title = page.get('title', '')
+            extract = (page.get('extract') or '').strip()
+            products.append({
+                'title': title,
+                'description': extract[:200],
+                'image_url': page.get('thumbnail', {}).get('source'),
+                'wiki_url': page.get('fullurl') or f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                'extract': extract[:300],
+            })
 
-            # Get page details including image
-            page_data = get_wikipedia_page_details(product_title)
-            if page_data:
-                products.append({
-                    'title': product_title,
-                    'description': product_snippet,
-                    'image_url': page_data.get('image'),
-                    'wiki_url': page_data.get('url'),
-                    'extract': page_data.get('extract', '')[:300]
-                })
-
+        if products and len(_WIKI_SEARCH_CACHE) < 1000:
+            _WIKI_SEARCH_CACHE[key] = [dict(product) for product in products]
         return products
 
     except Exception as e:
@@ -1291,7 +1393,19 @@ def search_wikipedia_products(product_name: str, limit: int = 5):
         return []
 
 
+_WIKI_DETAILS_CACHE = {}  # successful lookups only, so a network blip isn't remembered
+
+
 def get_wikipedia_page_details(page_title: str):
+    if page_title in _WIKI_DETAILS_CACHE:
+        return _WIKI_DETAILS_CACHE[page_title]
+    details = _fetch_wikipedia_page_details(page_title)
+    if details and len(_WIKI_DETAILS_CACHE) < 1000:
+        _WIKI_DETAILS_CACHE[page_title] = details
+    return details
+
+
+def _fetch_wikipedia_page_details(page_title: str):
     """
     Get detailed information about a Wikipedia page including image and extract.
 
@@ -1322,7 +1436,7 @@ def get_wikipedia_page_details(page_title: str):
         query_str = urllib.parse.urlencode(params)
         url = f"{api_url}?{query_str}"
 
-        req = urllib.request.Request(url, headers={'User-Agent': 'BeastTrack/1.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': WIKIPEDIA_USER_AGENT})
         with _open_url_with_ssl(req, timeout=5) as response:
             data = json.loads(response.read().decode('utf-8'))
 
@@ -1631,8 +1745,10 @@ Respond in this exact JSON format:
         all_products = []
         seen_titles = set()
 
-        for query in search_queries[:3]:
-            products = search_wikipedia_products(query, limit=3)
+        # Run the (up to 3) Wikipedia searches in parallel.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            batches = list(pool.map(lambda q: search_wikipedia_products(q, limit=3), search_queries[:3]))
+        for products in batches:
             for product in products:
                 title_key = (product.get('title') or '').strip().lower()
                 if title_key and title_key in seen_titles:
@@ -1692,6 +1808,9 @@ def _open_url_with_ssl(request_obj, timeout: int = 5):
     try:
         secure_context = ssl.create_default_context(cafile=certifi.where())
         return urlopen(request_obj, timeout=timeout, context=secure_context)
+    except HTTPError:
+        # The server answered (e.g. 429 rate limit); retrying would only add load.
+        raise
     except Exception as primary_error:
         try:
             # Fallback for environments with unusual Python SSL setup.

@@ -12,7 +12,7 @@ import {
   Flame,
   Plus,
   Settings as SettingsIcon,
-  Smartphone,
+  Music,
   ListChecks,
   MessageSquare,
   Swords,
@@ -265,7 +265,7 @@ export default function Dashboard() {
         </div>
 
         <div className="stack">
-          <BmiCard weight={profile.data?.weight} />
+          <BmiCard weight={profile.data?.weight} height={profile.data?.height} />
 
           <Card>
             <CardHeader icon={Flame} tone="orange" title="Streak calendar" subtitle="Workout days this week" />
@@ -347,7 +347,7 @@ export default function Dashboard() {
               { to: '/vision', icon: Camera, label: 'Vision Lab' },
               { to: '/analytics', icon: TrendingUp, label: 'Stats' },
               { to: '/settings', icon: SettingsIcon, label: 'Profile' },
-              { to: '/integrations', icon: Smartphone, label: 'Sync' },
+              { to: '/music', icon: Music, label: 'Music' },
             ].map((action) => {
               const Icon = action.icon
               return (

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Camera, Search, ShoppingCart, Utensils } from 'lucide-react'
+import { Camera, ImageUp, Search, ShoppingCart, X } from 'lucide-react'
 import { fetchFoodEstimate, fetchFoodEstimateGroq, recognizeFood } from '../services/api'
 import { logActivity } from '../services/activityFeed'
-import { normalizeNutritionPayload } from '../lib/health'
+import { normalizeNutritionPayload, scalePer100 } from '../lib/health'
 import ShoppingChat from '../components/ShoppingChat'
-import { Alert, Button, Card, CardHeader, Input, PageHeader } from '../ui/components'
+import { Alert, Button, Card, CardHeader, PageHeader } from '../ui/components'
+import { Modal } from '../ui/Modal'
+import './Nutrition.css'
 
 const MACROS = [
   { key: 'calories', label: 'Calories', unit: 'kcal', color: 'var(--orange)' },
@@ -13,21 +15,6 @@ const MACROS = [
   { key: 'carbs', label: 'Carbs', unit: 'g', color: 'var(--blue)' },
   { key: 'fat', label: 'Fat', unit: 'g', color: 'var(--red)' },
 ]
-
-function MacroGrid({ macros }) {
-  return (
-    <div className="grid-4">
-      {MACROS.map((m) => (
-        <div key={m.key} className="list-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-          <span className="stat__label" style={{ color: m.color }}>{m.label}</span>
-          <span className="mono" style={{ fontSize: '1.4rem', fontWeight: 700 }}>
-            {macros[m.key]}<span className="tiny dim"> {m.unit}</span>
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 const readAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -37,187 +24,216 @@ const readAsDataUrl = (file) =>
     reader.readAsDataURL(file)
   })
 
+// Prefer the AI lookup; fall back to the built-in food table.
+const lookupFood = (food, grams) => fetchFoodEstimateGroq(food, grams).catch(() => fetchFoodEstimate(food, grams))
+
 export default function Nutrition() {
   const queryClient = useQueryClient()
-  const fileInputRef = useRef(null)
-  const [foodQuery, setFoodQuery] = useState('')
-  const [foodLoading, setFoodLoading] = useState(false)
-  const [foodResult, setFoodResult] = useState(null)
-  const [foodError, setFoodError] = useState('')
-  const [imageLoading, setImageLoading] = useState(false)
-  const [imagePreview, setImagePreview] = useState('')
-  const [imageResult, setImageResult] = useState(null)
-  const [imageError, setImageError] = useState('')
+  const cameraInputRef = useRef(null)
+  const galleryInputRef = useRef(null)
+  const [food, setFood] = useState('')
+  const [grams, setGrams] = useState('100')
+  const [result, setResult] = useState(null) // normalized payload with per100
+  const [items, setItems] = useState([])
+  const [preview, setPreview] = useState('')
+  const [pending, setPending] = useState('') // 'search' | 'photo'
+  const [error, setError] = useState('')
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
 
-  useEffect(() => () => imagePreview && URL.revokeObjectURL(imagePreview), [imagePreview])
+  useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
 
-  const textMacros = normalizeNutritionPayload(foodResult || {})
-  const imageMacros = normalizeNutritionPayload(imageResult || {})
-  const imageItems = Array.isArray(imageResult?.recognition?.items) ? imageResult.recognition.items : []
+  const gramsNumber = Math.max(0, Number(grams) || 0)
+  // Recalculate instantly when the amount changes; no new request needed.
+  const totals = result?.per100 && gramsNumber ? scalePer100(result.per100, gramsNumber) : result
 
-  const handleFoodSearch = async (event) => {
+  const record = (normalized, action) => {
+    queryClient.invalidateQueries({ queryKey: ['nutrition'] })
+    logActivity({
+      source: 'Nutrition & Shopping',
+      action,
+      details: `${normalized.food} (${normalized.grams ?? gramsNumber} g): ${normalized.calories} kcal, ${normalized.protein}g protein.`,
+      meta: normalized,
+    })
+  }
+
+  const search = async (event) => {
     event.preventDefault()
-    const query = foodQuery.trim()
+    const query = food.trim()
     if (!query) return
-    setFoodLoading(true)
-    setFoodError('')
-    setImageResult(null)
-    setImageError('')
+    if (!gramsNumber) {
+      setError('Enter how many grams you are eating.')
+      return
+    }
+    setPending('search')
+    setError('')
+    setItems([])
     try {
-      // Groq gives richer data; fall back to the basic search endpoint.
-      const result = await fetchFoodEstimateGroq(query).catch(() => fetchFoodEstimate(query))
-      setFoodResult(result)
-      const normalized = normalizeNutritionPayload(result)
-      if (normalized.calories > 0) {
-        queryClient.invalidateQueries({ queryKey: ['nutrition'] })
-        logActivity({
-          source: 'Nutrition & Shopping',
-          action: 'Nutrition search completed',
-          details: `${normalized.food || query}: ${normalized.calories} kcal, ${normalized.protein}g protein.`,
-          meta: normalized,
-        })
-      } else {
-        setFoodError('No nutrition data found. Try a more specific food, e.g. “2 boiled eggs”.')
-      }
-    } catch (error) {
-      setFoodError(error?.message || 'Unable to calculate nutrition right now. Try another food.')
+      const normalized = normalizeNutritionPayload(await lookupFood(query, gramsNumber))
+      if (!normalized.calories && !normalized.per100) throw new Error('No nutrition data found. Try a more common name, e.g. “boiled egg”.')
+      setResult(normalized)
+      record(normalized, 'Nutrition search completed')
+    } catch (err) {
+      setResult(null)
+      setError(err?.message || 'Unable to calculate nutrition right now.')
     } finally {
-      setFoodLoading(false)
+      setPending('')
     }
   }
 
-  const handleImageUpload = async (event) => {
+  const analysePhoto = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
+    setPhotoPickerOpen(false)
     if (!file) return
-    setImageLoading(true)
-    setImageError('')
-    setFoodResult(null)
-    setFoodError('')
-    setImageResult(null)
-    setImagePreview(URL.createObjectURL(file))
+    setPending('photo')
+    setError('')
+    setResult(null)
+    setItems([])
+    setPreview(URL.createObjectURL(file))
     try {
-      const base64 = await readAsDataUrl(file)
-      const visionResult = await recognizeFood(base64).catch((err) => {
-        console.error(err)
-        return null
-      })
-      const detectedItems = visionResult?.recognition?.items || visionResult?.items || []
-      let normalized = normalizeNutritionPayload(visionResult)
-
-      // Enrich with a text lookup on the detected label.
-      if (normalized.food) {
-        const enriched = normalizeNutritionPayload(await fetchFoodEstimateGroq(normalized.food).catch(() => null))
-        if (enriched.calories > 0) normalized = enriched
-      }
-
-      // Last resort: guess from the file name.
-      if (normalized.calories <= 0) {
-        const fallbackQuery = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim()
-        if (fallbackQuery) {
-          const fallback = normalizeNutritionPayload(await fetchFoodEstimateGroq(fallbackQuery).catch(() => null))
-          if (fallback.calories > 0) normalized = { ...fallback, food: fallback.food || fallbackQuery }
-        }
-      }
-
-      if (normalized.calories <= 0) throw new Error('Could not estimate calories from this image. Try a clearer food photo.')
-
-      setImageResult({
-        recognition: {
-          detected_food: normalized.food,
-          calories: normalized.calories,
-          protein: normalized.protein,
-          carbs: normalized.carbs,
-          fats: normalized.fat,
-          items: detectedItems,
-        },
-      })
-      queryClient.invalidateQueries({ queryKey: ['nutrition'] })
-      logActivity({
-        source: 'Nutrition & Shopping',
-        action: 'Food image analyzed',
-        details: `${normalized.food || 'Food item'}: ${normalized.calories} kcal, ${normalized.protein}g protein.`,
-        meta: normalized,
-      })
-    } catch (error) {
-      setImageError(error?.message || 'Image analysis failed. Please try a different food photo.')
+      const vision = await recognizeFood(await readAsDataUrl(file)).catch(() => null)
+      const detected = normalizeNutritionPayload(vision)
+      setItems(vision?.recognition?.items || vision?.items || [])
+      // Last resort: guess the food from the file name.
+      const name = detected.food || file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim()
+      if (!name) throw new Error('Could not recognise this food. Try a clearer photo, or type the food name.')
+      setFood(name)
+      const normalized = normalizeNutritionPayload(await lookupFood(name, gramsNumber || 100))
+      if (!normalized.calories && !normalized.per100) throw new Error('Could not estimate calories from this photo. Try typing the food name.')
+      setResult(normalized)
+      record(normalized, 'Food image analyzed')
+    } catch (err) {
+      setError(err?.message || 'Image analysis failed. Please try a different photo.')
     } finally {
-      setImageLoading(false)
+      setPending('')
     }
+  }
+
+  const clearPhoto = () => {
+    setPreview('')
+    setItems([])
   }
 
   return (
     <div className="page">
-      <PageHeader eyebrow="Fuel" title="Nutrition" subtitle="Find calories and macros for any meal, by text or photo, and shop for healthy products." />
+      <PageHeader eyebrow="Fuel" title="Nutrition" subtitle="Calories and macros for exactly what you eat, from a name or a photo." />
 
       <div className="split split--even">
-        <div className="stack">
-          <Card>
-            <CardHeader icon={Search} tone="orange" title="Calorie finder" subtitle="Type a meal with its portion" />
-            <form className="input-group" onSubmit={handleFoodSearch}>
-              <Input value={foodQuery} onChange={(e) => setFoodQuery(e.target.value)} placeholder="e.g. 200g grilled chicken" aria-label="Food to look up" />
-              <Button type="submit" variant="primary" icon={Search} loading={foodLoading} aria-label="Search" />
-            </form>
-            {foodError && <div style={{ marginTop: 12 }}><Alert tone="error">{foodError}</Alert></div>}
-            {textMacros.calories > 0 && (
-              <div className="stack-sm" style={{ marginTop: 16 }}>
-                <strong>{textMacros.food || foodQuery}</strong>
-                <MacroGrid macros={textMacros} />
-              </div>
-            )}
-          </Card>
+        <Card className="stack">
+          <CardHeader icon={Search} tone="orange" title="Calorie finder" subtitle="Values are per 100 g, scaled to your portion" />
 
-          <Card>
-            <CardHeader icon={Camera} tone="green" title="Snap your plate" subtitle="Photo recognition with macro estimates" />
-            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
-            <button type="button" className="dropzone" onClick={() => fileInputRef.current?.click()} disabled={imageLoading}>
-              {imagePreview ? <img src={imagePreview} alt="Uploaded food" /> : (
-                <>
-                  <Camera size={34} strokeWidth={1.5} />
-                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>Upload or take a food photo</span>
-                </>
-              )}
-              {imageLoading && (
-                <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(11,11,20,0.7)' }}>
-                  <span className="row" style={{ color: 'var(--text)', fontWeight: 700 }}><span className="spinner" /> Analysing…</span>
-                </span>
-              )}
-            </button>
-            {imageError && <div style={{ marginTop: 12 }}><Alert tone="error">{imageError}</Alert></div>}
-            {imageMacros.calories > 0 && (
-              <div className="stack-sm" style={{ marginTop: 16 }}>
-                <strong>{imageMacros.food || 'Food detected'}</strong>
-                <MacroGrid macros={imageMacros} />
-                {imageItems.length > 0 && (
-                  <div className="stack-sm" style={{ marginTop: 8 }}>
-                    <span className="eyebrow">Protein per item</span>
-                    {imageItems.map((item, index) => (
-                      <div key={`${item.name || 'item'}-${index}`} className="list-row small" style={{ padding: '8px 12px' }}>
-                        <strong className="grow truncate">{item.name || 'Food item'}</strong>
-                        <span className="green mono">{Number(item.protein_per_100g || 0)}g/100g</span>
-                        <span className="dim mono">{Number(item.estimated_protein_g || 0)}g est.</span>
-                      </div>
-                    ))}
-                  </div>
+          <form className="cf-form" onSubmit={search}>
+            <div className="cf-food">
+              <input
+                className="input"
+                value={food}
+                onChange={(e) => setFood(e.target.value)}
+                placeholder="Food, e.g. chicken breast"
+                aria-label="Food to look up"
+              />
+              <button type="button" className="cf-camera" onClick={() => setPhotoPickerOpen(true)} aria-label="Add a food photo" disabled={Boolean(pending)}>
+                <Camera size={19} />
+              </button>
+            </div>
+            <label className="cf-grams">
+              <input
+                className="input mono"
+                type="number"
+                inputMode="decimal"
+                min={1}
+                max={5000}
+                step="1"
+                value={grams}
+                onChange={(e) => setGrams(e.target.value)}
+                aria-label="Amount in grams"
+              />
+              <span aria-hidden="true">g</span>
+            </label>
+            <Button type="submit" variant="primary" icon={Search} loading={pending === 'search'} disabled={pending === 'photo'} aria-label="Search" />
+          </form>
+
+          {preview && (
+            <div className="cf-photo">
+              <img src={preview} alt="Your food" />
+              <div className="grow small">
+                {pending === 'photo' ? (
+                  <span className="row" style={{ gap: 8 }}><span className="spinner" /> Recognising your food…</span>
+                ) : (
+                  <span className="muted">Photo analysed{result?.food ? `: ${result.food}` : ''}</span>
                 )}
               </div>
-            )}
-            {!imagePreview && !imageResult && <p className="tiny dim" style={{ marginTop: 10 }}>Tip: shoot from above in good light for best results.</p>}
-          </Card>
-        </div>
+              <button type="button" className="icon-btn" onClick={clearPhoto} aria-label="Remove photo"><X size={16} /></button>
+            </div>
+          )}
 
-        <Card className="stack" style={{ minHeight: 560 }}>
+          {error && <Alert tone="error">{error}</Alert>}
+
+          {totals && result && (
+            <div className="stack-sm">
+              <div className="spread">
+                <strong className="truncate">{result.food}</strong>
+                <span className="small muted mono">{gramsNumber || result.grams} g</span>
+              </div>
+              <div className="grid-4">
+                {MACROS.map((m) => (
+                  <div key={m.key} className="list-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                    <span className="stat__label" style={{ color: m.color }}>{m.label}</span>
+                    <span className="mono" style={{ fontSize: '1.35rem', fontWeight: 700 }}>
+                      {totals[m.key]}<span className="tiny dim"> {m.unit}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {result.per100 && (
+                <p className="tiny dim">
+                  Per 100 g: {Math.round(result.per100.calories)} kcal · {result.per100.protein} g protein · {result.per100.carbs} g carbs · {result.per100.fat} g fat
+                </p>
+              )}
+              {items.length > 0 && (
+                <div className="stack-sm" style={{ marginTop: 6 }}>
+                  <span className="eyebrow">Detected in the photo</span>
+                  {items.map((item, index) => (
+                    <div key={`${item.name || 'item'}-${index}`} className="list-row small" style={{ padding: '8px 12px' }}>
+                      <strong className="grow truncate">{item.name || 'Food item'}</strong>
+                      <span className="green mono">{Number(item.protein_per_100g || 0)}g protein/100g</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!result && !error && !preview && (
+            <p className="tiny dim">Type a food and how much you are eating, or tap the camera to snap your plate.</p>
+          )}
+        </Card>
+
+        <Card className="stack shop-card">
           <CardHeader icon={ShoppingCart} tone="violet" title="AI shopping assistant" subtitle="Find health products with buy links" />
           <ShoppingChat />
         </Card>
       </div>
 
-      <Card>
-        <div className="row">
-          <span className="icon-tile icon-tile--orange"><Utensils size={20} /></span>
-          <p className="small muted">Estimates are AI-generated and approximate. Portion size matters, so include weights or counts for best accuracy.</p>
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={analysePhoto} />
+      <input ref={galleryInputRef} type="file" accept="image/*" hidden onChange={analysePhoto} />
+
+      <Modal open={photoPickerOpen} onClose={() => setPhotoPickerOpen(false)} title="Add a food photo">
+        <p className="muted small" style={{ marginBottom: 16 }}>
+          Shoot from above in good light. We will recognise the food and use your {gramsNumber || 100} g portion.
+        </p>
+        <div className="cf-picker">
+          <button type="button" className="cf-picker__option" onClick={() => cameraInputRef.current?.click()}>
+            <Camera size={26} />
+            <strong>Take a photo</strong>
+            <span className="tiny muted">Use your camera</span>
+          </button>
+          <button type="button" className="cf-picker__option" onClick={() => galleryInputRef.current?.click()}>
+            <ImageUp size={26} />
+            <strong>Upload a photo</strong>
+            <span className="tiny muted">Choose from your device</span>
+          </button>
         </div>
-      </Card>
+      </Modal>
     </div>
   )
 }

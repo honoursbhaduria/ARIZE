@@ -4,9 +4,9 @@ import { Send, ShoppingCart } from 'lucide-react'
 import { shoppingChat } from '../services/api'
 import { logActivity } from '../services/activityFeed'
 import { useCartMutations } from '../lib/queries'
-import { Button } from '../ui/components'
 import { useToast } from '../ui/toast-context'
 import ShoppingProductCard from './ShoppingProductCard'
+import './ShoppingChat.css'
 
 const EXAMPLES = ['Diet coke', 'Products like whey protein', 'Vegan snack options']
 
@@ -58,8 +58,8 @@ export default function ShoppingChat() {
   }
 
   return (
-    <div className="stack grow" style={{ minHeight: 0 }}>
-      <div className="chat-log grow" ref={logRef} style={{ minHeight: 260, maxHeight: 620 }}>
+    <div className="shop-chat">
+      <div className="chat-log" ref={logRef}>
         {messages.length === 0 && (
           <div className="empty" style={{ margin: 'auto' }}>
             <ShoppingCart size={38} strokeWidth={1.5} />
@@ -75,7 +75,7 @@ export default function ShoppingChat() {
           <div key={msg.id} className="stack-sm">
             <div className={`bubble ${msg.type === 'user' ? 'bubble--user' : msg.type === 'error' ? 'bubble--error' : 'bubble--ai'}`}>{msg.text}</div>
             {msg.products?.length > 0 && (
-              <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(190px, 100%), 1fr))', gap: 12 }}>
+              <div className="shop-products" aria-label="Product results">
                 {msg.products.map((product, index) => (
                   <ShoppingProductCard
                     key={`${product.title}-${index}`}
@@ -98,14 +98,29 @@ export default function ShoppingChat() {
       </div>
 
       <form
-        className="composer"
+        className="chat-composer shop-composer"
         onSubmit={(e) => {
           e.preventDefault()
           send()
         }}
       >
-        <input className="input" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Ask about health products…" disabled={isLoading} aria-label="Ask the shopping assistant" />
-        <Button type="submit" variant="primary" icon={Send} loading={isLoading} disabled={!inputValue.trim()} aria-label="Send" />
+        <textarea
+          rows={1}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              send()
+            }
+          }}
+          placeholder="Ask about health products…"
+          disabled={isLoading}
+          aria-label="Ask the shopping assistant"
+        />
+        <button type="submit" className="chat-send" disabled={isLoading || !inputValue.trim()} aria-label="Send">
+          {isLoading ? <span className="spinner" /> : <Send size={18} />}
+        </button>
       </form>
       <Link to="/shopping-cart" className="link small" style={{ alignSelf: 'flex-end' }}>Open wish list →</Link>
     </div>

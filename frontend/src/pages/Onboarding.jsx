@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, Check, ChevronLeft, ChevronRight, HeartPulse, MapPin, Search, Target, User, Zap } from 'lucide-react'
-import { districtsQuery, useUpdateProfile } from '../lib/queries'
+import { Activity, Check, ChevronLeft, ChevronRight, HeartPulse, MapPin, Target, User, Zap } from 'lucide-react'
+import { useUpdateProfile } from '../lib/queries'
+import LocationPicker, { GLOBAL_LOCATION } from '../components/LocationPicker'
 import Logo from '../components/Logo'
 import { DIET_OPTIONS, GENDER_OPTIONS, GOAL_OPTIONS, cleanProfilePayload } from '../lib/profile'
 import { Alert, Button, Field, Input, ProgressBar, Textarea } from '../ui/components'
@@ -17,6 +17,7 @@ const BASE_STEPS = [
     fields: [
       { key: 'age', label: 'Age', type: 'number', placeholder: '25' },
       { key: 'weight', label: 'Weight (kg)', type: 'number', placeholder: '70' },
+      { key: 'height', label: 'Height (cm)', type: 'number', placeholder: '170', hint: 'Used to calculate your BMI' },
       { key: 'gender', label: 'Gender', type: 'choice', options: GENDER_OPTIONS },
     ],
   },
@@ -54,8 +55,8 @@ const BASE_STEPS = [
   },
   {
     id: 'location',
-    title: 'Join a district',
-    description: 'Compete on your local streak leaderboard.',
+    title: 'Where do you train?',
+    description: 'Search your city to join its streak leaderboard.',
     icon: MapPin,
     fields: [{ key: 'district', label: 'District', type: 'searchable' }],
   },
@@ -107,11 +108,12 @@ const FEMALE_HEALTH_WELLBEING_STEP = {
 const INITIAL_FORM = {
   age: '',
   weight: '',
+  height: '',
   goal: 'maintenance',
   diet_type: 'vegetarian',
   gender: 'other',
   activity_level: 'moderate',
-  district: 'Global (International)',
+  district: GLOBAL_LOCATION,
   women_health: {
     cycle_length_days: '',
     period_duration_days: '',
@@ -151,45 +153,6 @@ function ChoiceGroup({ field, value, onChange }) {
           </button>
         )
       })}
-    </div>
-  )
-}
-
-function DistrictPicker({ value, onChange }) {
-  const [search, setSearch] = useState('')
-  const districts = useQuery(districtsQuery)
-  const filtered = useMemo(() => {
-    const list = districts.data || []
-    const term = search.toLowerCase()
-    return (term ? list.filter((d) => d.toLowerCase().includes(term)) : list).slice(0, 60)
-  }, [districts.data, search])
-
-  return (
-    <div className="stack-sm">
-      <div className="list-row" style={{ borderColor: 'var(--gold)' }}>
-        <MapPin size={18} color="var(--gold)" />
-        <span className="grow truncate" style={{ fontWeight: 700 }}>{value}</span>
-      </div>
-      <div className="input-icon">
-        <Search size={18} />
-        <Input placeholder="Search districts…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search districts" />
-      </div>
-      <div className="stack-sm" style={{ maxHeight: 240, overflowY: 'auto' }}>
-        {districts.isLoading && <p className="small muted center" style={{ padding: 16 }}>Loading districts…</p>}
-        {!districts.isLoading && filtered.length === 0 && <p className="small muted center" style={{ padding: 16 }}>No districts found.</p>}
-        {filtered.map((district) => (
-          <button
-            key={district}
-            type="button"
-            onClick={() => onChange(district)}
-            className="nav-link"
-            style={{ justifyContent: 'space-between', color: district === value ? 'var(--gold)' : undefined }}
-          >
-            <span className="truncate">{district}</span>
-            {district === value && <Check size={16} />}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
@@ -302,11 +265,11 @@ export default function Onboarding() {
             </div>
 
             {step.fields.map((field) => (
-              <Field key={field.key} label={field.label} htmlFor={field.key}>
+              <Field key={field.key} label={field.label} htmlFor={field.key} hint={field.hint}>
                 {field.type === 'choice' ? (
                   <ChoiceGroup field={field} value={getFieldValue(field.key)} onChange={(v) => setFieldValue(field.key, v)} />
                 ) : field.type === 'searchable' ? (
-                  <DistrictPicker value={formData.district} onChange={(v) => setFieldValue('district', v)} />
+                  <LocationPicker value={formData.district} onChange={(v) => setFieldValue('district', v)} />
                 ) : field.type === 'textarea' ? (
                   <Textarea id={field.key} rows={3} placeholder={field.placeholder} value={getFieldValue(field.key)} onChange={(e) => setFieldValue(field.key, e.target.value)} />
                 ) : (

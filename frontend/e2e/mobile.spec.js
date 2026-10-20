@@ -3,7 +3,7 @@ import { collectErrors, expectNoHorizontalOverflow, signedInPage } from './helpe
 
 const APP_PAGES = [
   '/dashboard', '/counter', '/vision', '/chat', '/nutrition', '/heart-health',
-  '/shopping-cart', '/analytics', '/gallery', '/integrations', '/settings', '/posture-reading?topic=Squat',
+  '/shopping-cart', '/analytics', '/gallery', '/music', '/settings', '/posture-reading?topic=Squat',
 ]
 
 test.describe('mobile', () => {

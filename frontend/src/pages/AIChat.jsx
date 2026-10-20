@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Brain, CheckCircle2, Database, Heart, Send, ShieldCheck, Trash2, Upload, X } from 'lucide-react'
+import { Bot, Brain, CheckCircle2, Heart, Send, ShieldCheck, Trash2, Upload, X } from 'lucide-react'
 import { analyzeMedicalReport, sendChatMessage } from '../services/api'
 import { profileQuery } from '../lib/queries'
 import BmiCard from '../components/BmiCard'
-import { Alert, Badge, Button, Card, CardHeader, PageHeader } from '../ui/components'
+import { Alert, Card, CardHeader, PageHeader } from '../ui/components'
 import { ConfirmDialog } from '../ui/Modal'
 import './AIChat.css'
 
@@ -107,25 +107,35 @@ export default function AIChat() {
 
       <div className="split">
         <Card className="stack chat-card">
-          <div className="spread">
-            <div className="row">
-              <span className="icon-tile icon-tile--violet"><Bot size={20} /></span>
-              <h3 className="card-title">Coach chat</h3>
-              {history.length > 0 && <Badge tone="violet" icon={Database}>Memory on</Badge>}
+          <header className="chat-head">
+            <span className="chat-head__avatar"><Bot size={18} /></span>
+            <div className="grow">
+              <h3 className="chat-head__title">Coach chat</h3>
+              <span className="chat-head__status">
+                <span className={`chat-head__dot ${history.length ? 'is-on' : ''}`} />
+                {history.length ? 'Remembers this conversation' : 'Online'}
+              </span>
             </div>
             {history.length > 0 && (
               <button type="button" className="icon-btn icon-btn--danger" onClick={() => setConfirmClear(true)} aria-label="Clear chat history">
                 <Trash2 size={18} />
               </button>
             )}
-          </div>
+          </header>
 
           <div className="chat-log grow" ref={logRef} aria-live="polite">
             {history.length === 0 && !loading ? (
-              <div className="empty chat-empty" style={{ margin: 'auto' }}>
-                <Bot size={44} strokeWidth={1.5} />
-                <h3 style={{ color: 'var(--text)' }}>Your coach is ready</h3>
-                <p className="small" style={{ maxWidth: '36ch' }}>I remember our conversations and use your health data for personalised advice.</p>
+              <div className="chat-welcome">
+                <span className="chat-welcome__icon"><Bot size={28} strokeWidth={1.8} /></span>
+                <h3>Your coach is ready</h3>
+                <p>Ask about training, food, sleep or recovery. Answers use your profile and history.</p>
+                <div className="chat-welcome__prompts">
+                  {QUICK_PROMPTS.map((prompt) => (
+                    <button key={prompt} type="button" className="chat-prompt" onClick={() => askAi(prompt)}>
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               history.map((entry) => (
@@ -134,36 +144,27 @@ export default function AIChat() {
                   <div className={`bubble ${entry.source === 'error' ? 'bubble--error' : 'bubble--ai'}`}>
                     {entry.answer}
                     <div className="bubble__meta">
-                      {entry.source === 'medical_rag' ? '🩺 Medical intelligence' : entry.source === 'error' ? 'Error' : 'AI Coach'} · {entry.timestamp}
+                      {entry.source === 'medical_rag' ? 'Medical intelligence' : entry.source === 'error' ? 'Error' : 'Coach'} · {entry.timestamp}
                     </div>
                   </div>
                 </div>
               ))
             )}
             {loading && (
-              <div className="bubble bubble--ai row" style={{ gap: 10 }}>
-                <span className="spinner" /> Thinking…
+              <div className="bubble bubble--ai chat-typing" aria-label="Coach is typing">
+                <span /><span /><span />
               </div>
             )}
           </div>
 
-          {history.length === 0 && (
-            <div className="row-wrap chat-prompts">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button key={prompt} type="button" className="chip" onClick={() => askAi(prompt)}>{prompt}</button>
-              ))}
-            </div>
-          )}
-
           <form
-            className="composer chat-composer"
+            className="chat-composer"
             onSubmit={(e) => {
               e.preventDefault()
               askAi()
             }}
           >
             <textarea
-              className="textarea"
               rows={1}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -176,12 +177,14 @@ export default function AIChat() {
               placeholder="Ask your coach…"
               aria-label="Message the AI coach"
             />
-            <Button type="submit" variant="primary" icon={Send} loading={loading} disabled={!question.trim()} aria-label="Send" />
+            <button type="submit" className="chat-send" disabled={loading || !question.trim()} aria-label="Send">
+              {loading ? <span className="spinner" /> : <Send size={18} />}
+            </button>
           </form>
         </Card>
 
         <div className="stack">
-          <BmiCard weight={profile.data?.weight} showCategories />
+          <BmiCard weight={profile.data?.weight} height={profile.data?.height} showCategories />
 
           <Card>
             <CardHeader icon={Heart} title="Medical intelligence" />

@@ -1,12 +1,40 @@
 import { Link } from '@tanstack/react-router'
 import { Scale } from 'lucide-react'
-import { BMI_CATEGORIES, bmiScalePct, computeBmi, getBmiCategory } from '../lib/health'
+import { BMI_BANDS, BMI_CATEGORIES, BMI_SCALE_MAX, BMI_SCALE_MIN, bmiScalePct, computeBmi, getBmiCategory } from '../lib/health'
 import { Card, CardHeader } from '../ui/components'
+import './BmiCard.css'
 
-const SCALE_GRADIENT = 'linear-gradient(90deg, #4cc9f0 0%, #3ddc84 28%, #3ddc84 50%, #ff9f43 50%, #ff9f43 67%, #ff5c6c 67%)'
+const span = BMI_SCALE_MAX - BMI_SCALE_MIN
+const pctOf = (value) => ((value - BMI_SCALE_MIN) / span) * 100
+const colorOf = (label) => BMI_CATEGORIES.find((c) => c.label === label).color
 
-export default function BmiCard({ weight, showCategories = false }) {
-  const bmi = computeBmi(weight)
+function BmiScale({ bmi, category }) {
+  const marker = bmiScalePct(bmi)
+  return (
+    <div className="bmi-scale" role="img" aria-label={`BMI ${bmi}, ${category.label}`}>
+      <div className="bmi-scale__marker" style={{ left: `${marker}%`, '--marker-color': category.color }}>
+        <span className="bmi-scale__value">{bmi}</span>
+      </div>
+      <div className="bmi-scale__track">
+        {BMI_BANDS.map((band) => (
+          <span
+            key={band.label}
+            className={`bmi-scale__band ${band.label === category.label ? 'is-active' : ''}`}
+            style={{ flexBasis: `${((band.end - band.start) / span) * 100}%`, '--band-color': colorOf(band.label) }}
+          />
+        ))}
+      </div>
+      <div className="bmi-scale__ticks" aria-hidden="true">
+        {[18.5, 25, 30].map((tick) => (
+          <span key={tick} style={{ left: `${pctOf(tick)}%` }}>{tick}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default function BmiCard({ weight, height, showCategories = false }) {
+  const bmi = computeBmi(weight, height)
   const category = getBmiCategory(bmi)
 
   return (
@@ -18,21 +46,7 @@ export default function BmiCard({ weight, showCategories = false }) {
             <span className="mono" style={{ fontSize: '2.6rem', fontWeight: 700, color: category.color, lineHeight: 1 }}>{bmi}</span>
             <span style={{ fontWeight: 700, color: category.color }}>{category.label}</span>
           </div>
-          <div>
-            <div style={{ position: 'relative', height: 10, borderRadius: 999, background: SCALE_GRADIENT }}>
-              <span
-                style={{
-                  position: 'absolute', top: -4, left: `${bmiScalePct(bmi)}%`,
-                  width: 18, height: 18, borderRadius: '50%',
-                  background: category.color, border: '3px solid var(--bg)',
-                  transform: 'translateX(-50%)', transition: 'left 0.5s var(--ease)',
-                }}
-              />
-            </div>
-            <div className="spread tiny dim mono" style={{ marginTop: 6 }}>
-              <span>10</span><span>18.5</span><span>25</span><span>30</span><span>40+</span>
-            </div>
-          </div>
+          <BmiScale bmi={bmi} category={category} />
           {showCategories && (
             <div className="grid-2" style={{ gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
               {BMI_CATEGORIES.map((cat) => (
@@ -47,11 +61,14 @@ export default function BmiCard({ weight, showCategories = false }) {
               ))}
             </div>
           )}
-          <p className="tiny dim">Based on {weight} kg · assumed height 170 cm</p>
+          <p className="tiny dim">
+            {weight} kg · {height ? `${height} cm` : 'assumed 170 cm'}
+            {!height && <> · <Link to="/settings" className="link tiny">add your height</Link></>}
+          </p>
         </div>
       ) : (
         <div className="stack-sm">
-          <p className="muted small">Add your weight to see your BMI.</p>
+          <p className="muted small">Add your weight and height to see your BMI.</p>
           <Link to="/settings" className="link small">Update profile →</Link>
         </div>
       )}

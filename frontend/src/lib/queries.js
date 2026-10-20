@@ -7,6 +7,7 @@ import {
   fetchNotificationPreferences,
   fetchNutritionLogs,
   fetchProfile,
+  fetchProgressPhoto,
   fetchProgressPhotos,
   fetchStreakLeaderboard,
   fetchWorkoutSessions,
@@ -14,6 +15,8 @@ import {
   getCartItems,
   removeFromCart,
   saveWorkoutSession,
+  searchLocations,
+  searchMusic,
   updateCartItem,
   updateNotificationPreferences,
   updateProfile,
@@ -45,6 +48,13 @@ export const progressPhotosQuery = queryOptions({
   queryKey: ['progress', 'photos'],
   queryFn: () => fetchProgressPhotos().then(asArray),
 })
+export const progressPhotoQuery = (photoId) =>
+  queryOptions({
+    queryKey: ['progress', 'photo', photoId],
+    queryFn: () => fetchProgressPhoto(photoId),
+    staleTime: Infinity,
+  })
+
 export const cartQuery = queryOptions({
   queryKey: ['cart'],
   queryFn: () => getCartItems().then((res) => asArray(res?.items)),
@@ -65,26 +75,21 @@ export const postureArticleQuery = (topic) =>
     staleTime: Infinity,
   })
 
-const DISTRICTS_URL = 'https://raw.githubusercontent.com/sab99r/Indian-States-And-Districts/master/states-and-districts.json'
-const FALLBACK_DISTRICTS = ['Global (International)', 'Delhi, India', 'Mumbai, India', 'Bangalore, India']
+export const locationSearchQuery = (query) =>
+  queryOptions({
+    queryKey: ['locations', query.trim().toLowerCase()],
+    queryFn: () => searchLocations(query.trim()),
+    enabled: query.trim().length >= 2,
+    staleTime: Infinity,
+  })
 
-export const districtsQuery = queryOptions({
-  queryKey: ['districts'],
-  queryFn: async () => {
-    try {
-      const response = await fetch(DISTRICTS_URL)
-      const data = await response.json()
-      const list = ['Global (International)']
-      data.states.forEach((stateObj) => {
-        stateObj.districts.forEach((district) => list.push(`${district}, ${stateObj.state}`))
-      })
-      return list
-    } catch {
-      return FALLBACK_DISTRICTS
-    }
-  },
-  staleTime: Infinity,
-})
+export const musicSearchQuery = (query) =>
+  queryOptions({
+    queryKey: ['music', 'search', query.trim().toLowerCase()],
+    queryFn: () => searchMusic(query.trim()).then((res) => asArray(res?.tracks)),
+    enabled: query.trim().length >= 2,
+    staleTime: 10 * 60 * 1000,
+  })
 
 // Level/XP/streak used by the HUD, sidebar and dashboard.
 export function usePlayerStats() {

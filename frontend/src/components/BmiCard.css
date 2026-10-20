@@ -1,0 +1,58 @@
+/* BMI scale: proportional colour bands, a pin with the value, ticks at the real cut-offs. */
+.bmi-scale { position: relative; padding-top: 34px; }
+
+.bmi-scale__track {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+}
+.bmi-scale__band {
+  flex-grow: 0;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: var(--band-color);
+  opacity: 0.32;
+  transition: opacity 0.3s ease;
+}
+.bmi-scale__band:first-child { border-radius: 999px 3px 3px 999px; }
+.bmi-scale__band:last-child { border-radius: 3px 999px 999px 3px; }
+.bmi-scale__band.is-active { opacity: 1; box-shadow: 0 0 12px -2px var(--band-color); }
+
+.bmi-scale__marker {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: left 0.6s var(--ease);
+  pointer-events: none;
+}
+.bmi-scale__value {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--marker-color);
+  color: #0b0d12;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+/* little pointer under the value, touching the bar */
+.bmi-scale__marker::after {
+  content: '';
+  width: 0; height: 0;
+  margin-top: -1px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--marker-color);
+}
+
+.bmi-scale__ticks { position: relative; height: 18px; margin-top: 6px; }
+.bmi-scale__ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}

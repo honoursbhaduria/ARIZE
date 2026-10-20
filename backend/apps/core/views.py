@@ -32,7 +32,9 @@ from .models import (
     Cart,
     CartItem,
 )
+from .thumbnails import make_thumbnail
 from .serializers import (
+    ProgressPhotoListSerializer,
     SignupSerializer,
     UserProfileSerializer,
     ChatSerializer,
@@ -72,6 +74,11 @@ from .services import (
     calculate_streak,
     recognize_food_from_image,
     search_wikipedia_products,
+    audius_mood_tracks,
+    audius_search_tracks,
+    AUDIUS_MOOD_TITLES,
+    parse_food_query,
+    with_portion,
     generate_shopping_links,
     ai_shopping_chat,
     groq_calorie_lookup,
@@ -363,6 +370,7 @@ class GenerateAIWorkoutPlanView(APIView):
                     'goal': profile.goal,
                     'diet_type': profile.diet_type,
                     'weight': profile.weight,
+                    'height_cm': profile.height,
                 }
             except Exception:
                 pass
@@ -596,7 +604,10 @@ class NutritionSearchView(APIView):
         serializer = FoodSearchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         current_user = get_effective_user(request)
-        result = nutrition_lookup(serializer.validated_data['query'])
+        query = serializer.validated_data['query']
+        result = nutrition_lookup(query, serializer.validated_data.get('grams'))
+        if not result:
+            return Response({'detail': f"We couldn't find nutrition data for “{query}”. Try a more common name."}, status=status.HTTP_404_NOT_FOUND)
 
         entry = None
         if current_user:
@@ -619,8 +630,10 @@ class NutritionSearchGroqView(APIView):
         serializer.is_valid(raise_exception=True)
 
         current_user = get_effective_user(request)
-        query = serializer.validated_data['query']
-        result = groq_calorie_lookup(query)
+        food, parsed_grams = parse_food_query(serializer.validated_data['query'])
+        grams = serializer.validated_data.get('grams') or parsed_grams or 100
+        per_100g = groq_calorie_lookup(food)
+        result = with_portion(food, per_100g, grams, 'groq') if per_100g else None
 
         if not result:
             return Response(
@@ -836,7 +849,8 @@ class ChatAskView(APIView):
             # Calculate BMI for the AI doctor context
             bmi = None
             if profile.weight:
-                bmi = round(profile.weight / (1.70 * 1.70), 1)
+                height_m = (profile.height or 170) / 100  # fall back to 170 cm if height not set yet
+                bmi = round(profile.weight / (height_m * height_m), 1)
 
             context = {
                 'profile': {
@@ -844,6 +858,7 @@ class ChatAskView(APIView):
                     'diet_type': profile.diet_type,
                     'streak_days': profile.streak_days,
                     'weight': profile.weight,
+                    'height_cm': profile.height,
                     'age': profile.age,
                     'bmi': bmi,
                 },
@@ -1014,31 +1029,100 @@ class ShoppingSuggestionView(APIView):
 
 
 class MusicRecommendationView(APIView):
+    """A shuffled queue of full-length tracks from Audius for a workout mood."""
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         serializer = MusicSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        recommendation = mood_playlist(serializer.validated_data['mood'])
+        mood = serializer.validated_data['mood']
+        try:
+            tracks = audius_mood_tracks(mood)
+        except Exception as exc:
+            print(f'Music recommendation error: {exc}')
+            return Response({'detail': 'Music is unavailable right now. Please try again shortly.'}, status=status.HTTP_502_BAD_GATEWAY)
 
+        playlist_name = AUDIUS_MOOD_TITLES.get(mood, 'Workout Mix')
         user = request.user if getattr(request.user, 'is_authenticated', False) else None
         if user:
-            record = MusicRecommendation.objects.create(user=user, mood=serializer.validated_data['mood'], **recommendation)
-            return Response({'id': record.id, **recommendation})
+            MusicRecommendation.objects.create(user=user, mood=mood, provider='audius', playlist_name=playlist_name, playlist_url=tracks[0]['permalink'])
+        return Response({'mood': mood, 'provider': 'audius', 'playlist_name': playlist_name, 'tracks': tracks})
 
-        return Response({'id': None, **recommendation})
+class MusicSearchView(APIView):
+    """Search any song, artist or genre on Audius."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        query = (request.query_params.get('q') or '').strip()
+        if len(query) < 2:
+            return Response({'tracks': []})
+        try:
+            tracks = audius_search_tracks(query[:100])
+        except Exception as exc:
+            print(f'Music search error: {exc}')
+            return Response({'detail': 'Music search is unavailable right now.'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'query': query, 'tracks': tracks})
 
 
 class ProgressPhotoView(APIView):
     def get(self, request):
-        photos = ProgressPhoto.objects.filter(user=request.user).order_by('-created_at')[:50]
-        return Response(ProgressPhotoSerializer(photos, many=True).data)
+        # defer() keeps the multi-megabyte full images out of the gallery query entirely.
+        photos = ProgressPhoto.objects.filter(user=request.user).defer('image_url').order_by('-created_at')[:50]
+        return Response(ProgressPhotoListSerializer(photos, many=True).data)
 
     def post(self, request):
         serializer = ProgressPhotoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        photo = serializer.save(user=request.user)
-        return Response(ProgressPhotoSerializer(photo).data, status=status.HTTP_201_CREATED)
+        photo = serializer.save(user=request.user, thumbnail=make_thumbnail(serializer.validated_data['image_url']))
+        return Response({**ProgressPhotoListSerializer(photo).data, 'image_url': photo.image_url}, status=status.HTTP_201_CREATED)
+
+
+_LOCATION_CACHE = {}
+
+
+class LocationSearchView(APIView):
+    """Worldwide place search for the profile district (Open-Meteo geocoding, GeoNames data)."""
+
+    def get(self, request):
+        query = (request.query_params.get('q') or '').strip()
+        if len(query) < 2:
+            return Response({'results': []})
+        key = query.lower()
+        if key in _LOCATION_CACHE:
+            return Response({'results': _LOCATION_CACHE[key]})
+        try:
+            response = httpx.get(
+                'https://geocoding-api.open-meteo.com/v1/search',
+                params={'name': query, 'count': 10, 'language': 'en', 'format': 'json'},
+                timeout=6,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return Response({'detail': 'Location search is unavailable right now.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        results = []
+        for place in response.json().get('results') or []:
+            parts = [place.get('name'), place.get('admin1'), place.get('country')]
+            label = ', '.join(dict.fromkeys(part for part in parts if part))  # drop empty/duplicate parts
+            results.append({
+                'id': place.get('id'),
+                'label': label[:80],  # fits UserProfile.district
+                'name': place.get('name'),
+                'region': place.get('admin1') or '',
+                'country': place.get('country') or '',
+                'country_code': place.get('country_code') or '',
+            })
+        if len(_LOCATION_CACHE) < 2000:
+            _LOCATION_CACHE[key] = results
+        return Response({'results': results})
+
+
+class ProgressPhotoDetailView(APIView):
+    def get(self, request, photo_id):
+        photo = ProgressPhoto.objects.filter(user=request.user, id=photo_id).first()
+        if not photo:
+            return Response({'detail': 'Photo not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ProgressPhotoSerializer(photo).data)
 
 
 class NotificationPreferenceView(APIView):

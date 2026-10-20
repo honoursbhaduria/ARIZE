@@ -1,0 +1,62 @@
+/* Shopping assistant: fixed-size card; messages scroll, products swipe sideways. */
+.shop-card {
+  height: 640px;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 1023px) {
+  .shop-card { height: min(640px, calc(100dvh - var(--hud-h) - var(--bottom-nav-h) - 40px)); min-height: 460px; }
+}
+
+.shop-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.shop-chat .chat-log { flex: 1 1 0; min-height: 0; overflow-y: auto; padding-right: 2px; }
+
+/* Product results: one swipeable row of compact cards */
+.shop-products {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.shop-product {
+  flex: 0 0 200px;
+  scroll-snap-align: start;
+  display: flex; flex-direction: column;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.shop-product__image { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: var(--surface-2); }
+/* absolute so the picture's own size can't stretch the frame past its aspect ratio */
+.shop-product__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.shop-product__body { display: flex; flex-direction: column; gap: 6px; padding: 10px; flex: 1; }
+.shop-product__title { font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
+.shop-product__desc {
+  font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.shop-product__links { display: flex; flex-wrap: wrap; gap: 4px; }
+.shop-product__links a {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.68rem; color: var(--text-muted);
+}
+.shop-product__links a:hover { border-color: var(--gold-deep); color: var(--text); }
+.shop-product__buy { display: flex; align-items: center; gap: 4px; margin-top: auto; }
+.shop-product__buy .icon-btn { width: 28px; height: 28px; }
+.shop-product__buy .btn { min-height: 32px; padding: 0 10px; font-size: 0.72rem; flex: 1; }
+
+/* Inside a padded card the composer doesn't need its own frame */
+.shop-composer { padding: 10px 0 0; background: transparent; }
+
+/* Phones: smaller product cards (kept last so it overrides the base rules) */
+@media (max-width: 480px) {
+  .shop-product { flex-basis: 156px; }
+  .shop-product__image { aspect-ratio: 16 / 10; }
+}

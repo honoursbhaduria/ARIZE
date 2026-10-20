@@ -1,0 +1,37 @@
+/* Slim "now playing" bar shown on every page except Music. Audio only, no video. */
+.music-bar {
+  position: fixed;
+  z-index: 45;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--bottom-nav-h) + 10px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 6px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--gold-deep);
+  background: rgba(24, 27, 38, 0.96);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+@media (min-width: 900px) {
+  .music-bar { left: auto; right: 24px; bottom: 24px; width: 360px; }
+}
+.music-bar__art {
+  width: 40px; height: 40px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 8px; object-fit: cover;
+  background: var(--gold-ink); color: var(--gold);
+}
+.music-bar__text { display: flex; flex-direction: column; min-width: 0; flex: 1; padding: 0 6px; }
+.music-bar__title { font-size: 0.86rem; font-weight: 700; }
+.music-bar .icon-btn { width: 36px; height: 36px; }
+.music-bar__progress { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--gold); transition: width 0.25s linear; }
+
+/* Leave room so the bar never covers the end of a page */
+body.has-music-bar .shell-main { padding-bottom: calc(var(--bottom-nav-h) + 76px + env(safe-area-inset-bottom)); }
+@media (min-width: 900px) {
+  body.has-music-bar .shell-main { padding-bottom: 90px; }
+}

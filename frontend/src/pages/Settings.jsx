@@ -8,6 +8,7 @@ import { DIET_OPTIONS, GENDER_OPTIONS, GOAL_OPTIONS, cleanProfilePayload } from 
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Select, Skeleton, Switch } from '../ui/components'
 import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/toast-context'
+import LocationPicker from '../components/LocationPicker'
 
 const ACTIVITY_OPTIONS = [
   { value: 'sedentary', label: '0–1 sessions / week' },
@@ -28,6 +29,7 @@ function ProfileForm({ initial }) {
   const [profile, setProfile] = useState(() => ({
     age: initial?.age ?? '',
     weight: initial?.weight ?? '',
+    height: initial?.height ?? '',
     district: initial?.district || 'global',
     goal: initial?.goal || 'maintenance',
     diet_type: initial?.diet_type || 'vegetarian',
@@ -57,13 +59,14 @@ function ProfileForm({ initial }) {
       <div className="grid-2">
         <Field label="Age" htmlFor="s-age"><Input id="s-age" type="number" inputMode="numeric" min={0} value={profile.age} onChange={set('age')} /></Field>
         <Field label="Weight (kg)" htmlFor="s-weight"><Input id="s-weight" type="number" inputMode="decimal" min={0} step="0.1" value={profile.weight} onChange={set('weight')} /></Field>
+        <Field label="Height (cm)" htmlFor="s-height"><Input id="s-height" type="number" inputMode="decimal" min={0} step="0.5" value={profile.height} onChange={set('height')} /></Field>
         <Field label="Gender" htmlFor="s-gender"><Select id="s-gender" options={GENDER_OPTIONS} value={profile.gender} onChange={set('gender')} /></Field>
         <Field label="Training level" htmlFor="s-activity"><Select id="s-activity" options={ACTIVITY_OPTIONS} value={profile.activity_level} onChange={set('activity_level')} /></Field>
         <Field label="Goal" htmlFor="s-goal"><Select id="s-goal" options={GOAL_OPTIONS} value={profile.goal} onChange={set('goal')} /></Field>
         <Field label="Diet type" htmlFor="s-diet"><Select id="s-diet" options={DIET_OPTIONS} value={profile.diet_type} onChange={set('diet_type')} /></Field>
       </div>
-      <Field label="District" htmlFor="s-district" hint="Used for your local leaderboard">
-        <Input id="s-district" value={profile.district} onChange={set('district')} maxLength={80} />
+      <Field label="City" htmlFor="s-district" hint="Used for your local leaderboard">
+        <LocationPicker id="s-district" value={profile.district} onChange={(label) => setProfile((prev) => ({ ...prev, district: label }))} />
       </Field>
       <Button type="submit" variant="primary" icon={Save} loading={update.isPending} block>Save profile</Button>
     </form>

@@ -110,6 +110,13 @@ class ProfileTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(User.objects.create_user('dave', 'dave@example.com', 'pw-123456'))
 
+    def test_profile_stores_height_and_rejects_impossible_values(self):
+        ok = self.client.put('/api/profile/', {'weight': 72, 'height': 178}, format='json')
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(ok.json()['height'], 178)
+        self.assertEqual(self.client.put('/api/profile/', {'height': 5}, format='json').status_code, 400)
+        self.assertEqual(self.client.put('/api/profile/', {'weight': 2000}, format='json').status_code, 400)
+
     def test_profile_accepts_null_age_and_weight(self):
         response = self.client.put('/api/profile/', {'age': None, 'weight': None, 'goal': 'fat_loss'}, format='json')
         self.assertEqual(response.status_code, 200)
@@ -143,3 +150,125 @@ class RaceConditionTests(TestCase):
         ids = {self.client.post('/api/auth/demo/', {}, format='json').json()['user']['id'] for _ in range(3)}
         self.assertEqual(len(ids), 1)
         self.assertEqual(User.objects.filter(username='demo_user').count(), 1)
+
+
+class NutritionPortionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(User.objects.create_user('eater', 'eater@example.com', 'pw-123456'))
+        # Keep tests offline and deterministic: no Groq.
+        patcher = mock.patch('apps.core.services.groq_calorie_lookup', return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher2 = mock.patch('apps.core.services.groq_chat_completion', return_value=None)
+        patcher2.start()
+        self.addCleanup(patcher2.stop)
+
+    def search(self, **body):
+        return self.client.post('/api/nutrition/search/', body, format='json')
+
+    def test_parse_food_query(self):
+        from .services import parse_food_query
+        self.assertEqual(parse_food_query('200g chicken breast'), ('chicken breast', 200.0))
+        self.assertEqual(parse_food_query('150 grams of rice'), ('rice', 150.0))
+        self.assertEqual(parse_food_query('paneer'), ('paneer', None))
+
+    def test_scales_per_100g_values_to_the_amount_eaten(self):
+        result = self.search(query='chicken breast', grams=200).json()['result']
+        self.assertEqual(result['per_100g']['calories'], 165)
+        self.assertEqual(result['grams'], 200)
+        self.assertEqual(result['calories'], 330)
+        self.assertEqual(result['protein'], 62)
+
+    def test_amount_written_in_the_query_is_used(self):
+        self.assertEqual(self.search(query='200g chicken breast').json()['result']['calories'], 330)
+
+    def test_defaults_to_100g(self):
+        self.assertEqual(self.search(query='rice').json()['result']['grams'], 100)
+
+    def test_prefers_the_closest_food_name(self):
+        self.assertEqual(self.search(query='chicken').json()['result']['food'], 'Chicken')
+        self.assertEqual(self.search(query='grilled chicken breast').json()['result']['food'], 'Chicken Breast')
+
+    def test_unknown_food_is_not_invented(self):
+        self.assertEqual(self.search(query='xyzzy food').status_code, 404)
+
+    def test_logs_the_eaten_amount(self):
+        from .models import NutritionLog
+        self.search(query='egg', grams=50)
+        self.assertEqual(NutritionLog.objects.latest('id').calories, 78)
+
+    def test_rejects_impossible_amounts(self):
+        self.assertEqual(self.search(query='rice', grams=0).status_code, 400)
+
+
+class LocationSearchTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(User.objects.create_user('traveller', 't@example.com', 'pw-123456'))
+
+    def test_returns_labelled_places(self):
+        payload = {'results': [{'id': 1, 'name': 'Pune', 'admin1': 'Maharashtra', 'country': 'India', 'country_code': 'IN'}]}
+        with mock.patch('httpx.get', return_value=httpx.Response(200, json=payload, request=httpx.Request('GET', 'https://x'))):
+            data = self.client.get('/api/locations/search/', {'q': 'pune'}).json()
+        self.assertEqual(data['results'][0]['label'], 'Pune, Maharashtra, India')
+
+    def test_short_queries_return_nothing_without_calling_out(self):
+        with mock.patch('httpx.get') as get:
+            self.assertEqual(self.client.get('/api/locations/search/', {'q': 'p'}).json(), {'results': []})
+        get.assert_not_called()
+
+    def test_upstream_failure_is_a_clean_502(self):
+        with mock.patch('httpx.get', side_effect=httpx.ConnectError('down')):
+            self.assertEqual(self.client.get('/api/locations/search/', {'q': 'nowhere-xyz'}).status_code, 502)
+
+    def test_requires_login(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get('/api/locations/search/', {'q': 'pune'}).status_code, 401)
+
+
+class MusicTests(TestCase):
+    TRACKS = [{'id': 'a1', 'title': 'Lift', 'artist': 'DJ', 'duration': 200, 'artwork': '', 'permalink': 'https://audius.co/x', 'stream_url': 'https://h/v1/tracks/a1/stream?app_name=ARIZE'}]
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user('listener', 'l@example.com', 'pw-123456')
+        self.client.force_authenticate(self.user)
+
+    def test_returns_a_track_queue_and_logs_it(self):
+        from .models import MusicRecommendation
+        with mock.patch('apps.core.views.audius_mood_tracks', return_value=list(self.TRACKS)):
+            res = self.client.post('/api/music/recommend/', {'mood': 'cardio'}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['provider'], 'audius')
+        self.assertEqual(res.json()['tracks'][0]['stream_url'], self.TRACKS[0]['stream_url'])
+        self.assertEqual(MusicRecommendation.objects.get(user=self.user).provider, 'audius')
+
+    def test_upstream_failure_is_a_clean_502(self):
+        with mock.patch('apps.core.views.audius_mood_tracks', side_effect=RuntimeError('down')):
+            self.assertEqual(self.client.post('/api/music/recommend/', {'mood': 'yoga'}, format='json').status_code, 502)
+
+    def test_rejects_unknown_moods(self):
+        self.assertEqual(self.client.post('/api/music/recommend/', {'mood': 'polka'}, format='json').status_code, 400)
+
+
+class MusicSearchTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_search_returns_tracks(self):
+        tracks = [{'id': 's1', 'title': 'Eye of the Tiger', 'artist': 'X', 'duration': 240, 'artwork': '', 'permalink': '', 'stream_url': 'https://h/s1'}]
+        with mock.patch('apps.core.views.audius_search_tracks', return_value=tracks) as search:
+            res = self.client.get('/api/music/search/', {'q': 'eye of the tiger'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['tracks'][0]['title'], 'Eye of the Tiger')
+        search.assert_called_once_with('eye of the tiger')
+
+    def test_short_query_returns_nothing(self):
+        with mock.patch('apps.core.views.audius_search_tracks') as search:
+            self.assertEqual(self.client.get('/api/music/search/', {'q': 'a'}).json(), {'tracks': []})
+        search.assert_not_called()
+
+    def test_upstream_failure_is_502(self):
+        with mock.patch('apps.core.views.audius_search_tracks', side_effect=RuntimeError('down')):
+            self.assertEqual(self.client.get('/api/music/search/', {'q': 'rock'}).status_code, 502)

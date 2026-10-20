@@ -334,18 +334,15 @@ export function fetchStreakLeaderboard(district = '', limit = 10) {
 }
 
 // Nutrition
-export function fetchFoodEstimate(foodName) {
-  return request('/nutrition/search/', {
-    method: 'POST',
-    body: JSON.stringify({ query: foodName }),
-  })
+// `grams` is the amount eaten; the API returns per-100 g values plus totals for it.
+const foodBody = (foodName, grams) => JSON.stringify(grams ? { query: foodName, grams } : { query: foodName })
+
+export function fetchFoodEstimate(foodName, grams) {
+  return request('/nutrition/search/', { method: 'POST', body: foodBody(foodName, grams) })
 }
 
-export function fetchFoodEstimateGroq(foodName) {
-  return request('/nutrition/search/groq/', {
-    method: 'POST',
-    body: JSON.stringify({ query: foodName }),
-  })
+export function fetchFoodEstimateGroq(foodName, grams) {
+  return request('/nutrition/search/groq/', { method: 'POST', body: foodBody(foodName, grams) })
 }
 
 export function recognizeFood(imageData) {
@@ -397,6 +394,10 @@ export function fetchWorkoutSessions() {
 }
 
 // Music
+export function searchMusic(query) {
+  return request(`/music/search/?q=${encodeURIComponent(query)}`)
+}
+
 export function getMusicRecommendation(mood) {
   return request('/music/recommend/', {
     method: 'POST',
@@ -417,6 +418,14 @@ export function updateNotificationPreferences(preferenceData) {
 
 export function fetchProgressPhotos() {
   return request('/progress/photos/')
+}
+
+export function searchLocations(query) {
+  return request(`/locations/search/?q=${encodeURIComponent(query)}`).then((res) => res?.results || [])
+}
+
+export function fetchProgressPhoto(photoId) {
+  return request(`/progress/photos/${photoId}/`)
 }
 
 export function uploadProgressPhoto(photoData) {

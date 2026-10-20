@@ -64,6 +64,23 @@ const CUES = [
   { cue: 'Keep your elbow stationary and lower the weight slowly.', exercise: 'Bicep curls' },
 ]
 
+// Advances a carousel every `ms`, pausing while hovered/focused and when the
+// visitor prefers reduced motion.
+function useAutoAdvance(setIndex, length, ms) {
+  const [paused, setPaused] = useState(false)
+  useEffect(() => {
+    if (paused || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined
+    const timer = setInterval(() => setIndex((i) => (i + 1) % length), ms)
+    return () => clearInterval(timer)
+  }, [paused, setIndex, length, ms])
+  return {
+    onMouseEnter: () => setPaused(true),
+    onMouseLeave: () => setPaused(false),
+    onFocus: () => setPaused(true),
+    onBlur: () => setPaused(false),
+  }
+}
+
 function Icon({ icon, className, size = 20 }) {
   return <HugeiconsIcon icon={icon} size={size} strokeWidth={1.8} className={className} />
 }
@@ -87,7 +104,7 @@ function RoundArrow({ direction, onClick, label }) {
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="btn-texture grid size-11 shrink-0 place-items-center rounded-full border-2 border-gold-deep bg-gold-ink text-gold transition-transform hover:scale-105 active:scale-95"
+      className="btn-texture grid size-10 shrink-0 place-items-center rounded-full border-2 border-gold-deep bg-gold-ink text-gold sm:size-11 transition-transform hover:scale-105 active:scale-95"
     >
       <Icon icon={direction === 'left' ? ArrowLeft01Icon : ArrowRight01Icon} />
     </button>
@@ -158,10 +175,8 @@ export default function Landing() {
   const [cue, setCue] = useState(0)
   const [demoPending, setDemoPending] = useState(false)
 
-  useEffect(() => {
-    const timer = setInterval(() => setCue((c) => (c + 1) % CUES.length), 6000)
-    return () => clearInterval(timer)
-  }, [])
+  const moveAuto = useAutoAdvance(setMove, MOVES.length, 4500)
+  const cueAuto = useAutoAdvance(setCue, CUES.length, 6000)
 
   const startDemo = async () => {
     setDemoPending(true)
@@ -317,7 +332,7 @@ export default function Landing() {
       <section id="training" className="relative overflow-hidden py-16 sm:py-24">
         <SectionTitle title="The camera counts. You lift." text="Pose tracking runs in your browser, so video never leaves your device." className="px-5" />
 
-        <div className="relative mx-auto mt-14 flex max-w-6xl items-center justify-center gap-6 px-5">
+        <div className="relative mx-auto mt-14 flex max-w-6xl items-center justify-center gap-6 px-5" {...moveAuto}>
           {visibleMoves.map((item) => (
             <Card
               key={`${item.title}-${item.offset}`}
@@ -337,15 +352,10 @@ export default function Landing() {
               </CardHeader>
             </Card>
           ))}
-          <div className="absolute inset-x-6 top-1/2 hidden -translate-y-1/2 justify-between md:flex">
+          <div className="pointer-events-none absolute inset-x-1 top-[38%] flex -translate-y-1/2 justify-between sm:inset-x-6 md:top-1/2 [&>button]:pointer-events-auto">
             <RoundArrow direction="left" label="Previous exercise" onClick={() => shift(-1, MOVES.length, setMove)} />
             <RoundArrow direction="right" label="Next exercise" onClick={() => shift(1, MOVES.length, setMove)} />
           </div>
-        </div>
-        <div className="mt-6 flex items-center justify-center gap-5 md:hidden">
-          <RoundArrow direction="left" label="Previous exercise" onClick={() => shift(-1, MOVES.length, setMove)} />
-          <span className="text-sm text-muted-foreground">{move + 1} / {MOVES.length}</span>
-          <RoundArrow direction="right" label="Next exercise" onClick={() => shift(1, MOVES.length, setMove)} />
         </div>
       </section>
 
@@ -356,7 +366,7 @@ export default function Landing() {
         <img src="/landing/dark-gym.webp" alt="" loading="lazy" className="absolute inset-0 size-full object-cover opacity-15" />
         <div className="relative mx-auto max-w-3xl px-5 text-center sm:px-8">
           <SectionTitle title="Cues while you train" text="Workout Coach talks you through each set, so you fix form mid-rep instead of after." />
-          <div className="mt-12 flex items-center gap-4">
+          <div className="mt-12 flex min-h-[220px] items-center gap-4" {...cueAuto}>
             <span className="hidden sm:block"><RoundArrow direction="left" label="Previous cue" onClick={() => shift(-1, CUES.length, setCue)} /></span>
             <figure className="flex-1" aria-live="polite">
               <Icon icon={QuoteDownIcon} size={46} className="mx-auto text-gold" />
@@ -367,19 +377,6 @@ export default function Landing() {
             </figure>
             <span className="hidden sm:block"><RoundArrow direction="right" label="Next cue" onClick={() => shift(1, CUES.length, setCue)} /></span>
           </div>
-          <div className="mt-8 flex items-center justify-center gap-2">
-            <span className="mr-3 sm:hidden"><RoundArrow direction="left" label="Previous cue" onClick={() => shift(-1, CUES.length, setCue)} /></span>
-            {CUES.map((item, index) => (
-              <button
-                key={item.exercise}
-                type="button"
-                aria-label={`Show cue ${index + 1}`}
-                onClick={() => setCue(index)}
-                className={cn('h-2 rounded-full transition-all', index === cue ? 'w-6 bg-gold' : 'w-2 bg-white/25')}
-              />
-            ))}
-            <span className="ml-3 sm:hidden"><RoundArrow direction="right" label="Next cue" onClick={() => shift(1, CUES.length, setCue)} /></span>
-          </div>
         </div>
       </section>
 
@@ -387,23 +384,23 @@ export default function Landing() {
 
       {/* ---------- Coach ---------- */}
       <section id="coaching" className="py-24">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-8 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="relative text-center lg:text-left">
-            <h2 className="text-metal text-metal--gold relative z-10 text-[clamp(2.6rem,6.5vw,5rem)] leading-[0.98] font-extrabold">
+        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-8 lg:grid-cols-2">
+          <div className="text-center lg:text-left">
+            <h2 className="text-metal text-metal--gold text-[clamp(2.6rem,6vw,4.6rem)] leading-[0.98] font-extrabold">
               A coach that
               <br />
               knows your
               <br />
               numbers
             </h2>
+          </div>
+          <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
             <img
               src="/landing/coach.webp"
               alt="Athlete training with dumbbells"
               loading="lazy"
-              className="mx-auto mt-8 aspect-[4/5] w-full max-w-xs rounded-xs border-2 border-gold-deep object-cover lg:absolute lg:top-1/2 lg:right-0 lg:mt-0 lg:w-56 lg:-translate-y-1/2"
+              className="mb-8 aspect-[4/5] w-full max-w-xs rounded-xs border-2 border-gold-deep object-cover lg:aspect-[16/10] lg:max-w-none"
             />
-          </div>
-          <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
             <p className="text-lg leading-relaxed text-muted-foreground">
               Ask about meals, sleep or recovery and get answers that use your goal, weight, diet and training history. Upload blood reports and the advice adapts to those too.
             </p>

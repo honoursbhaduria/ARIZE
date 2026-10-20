@@ -47,6 +47,7 @@ test.describe('auth & onboarding', () => {
     await expect(page).toHaveURL(/\/onboarding$/)
     await page.getByLabel('Age').fill('28')
     await page.getByLabel('Weight (kg)').fill('80')
+    await page.getByLabel('Height (cm)').fill('180')
     await page.getByRole('radio', { name: /^Male/ }).click()
     await page.getByRole('button', { name: 'Next' }).click()
     await page.getByRole('radio', { name: /Muscle Gain/ }).click()
@@ -59,8 +60,9 @@ test.describe('auth & onboarding', () => {
     await expect(page.getByRole('heading', { name: 'Character created!' })).toBeVisible()
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 10_000 })
     await expect(page.getByRole('heading', { level: 1 })).toContainText(user.username)
-    // Weight from onboarding feeds the BMI card: 80 / 1.7² = 27.7
-    await expect(page.getByText('27.7', { exact: true })).toBeVisible()
+    // Weight and height from onboarding feed the BMI card: 80 / 1.8² = 24.7
+    await expect(page.getByText('24.7', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('80 kg · 180 cm')).toBeVisible()
     expect(errors).toEqual([])
   })
 

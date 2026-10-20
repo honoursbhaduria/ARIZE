@@ -76,6 +76,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = [
             'age',
             'weight',
+            'height',
             'district',
             'goal',
             'diet_type',
@@ -89,6 +90,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_streak_days(self, obj):
         return obj.streak_days
+
+    def validate_height(self, value):
+        if value is not None and not 80 <= value <= 260:
+            raise serializers.ValidationError('Height must be between 80 and 260 cm.')
+        return value
+
+    def validate_weight(self, value):
+        if value is not None and not 20 <= value <= 400:
+            raise serializers.ValidationError('Weight must be between 20 and 400 kg.')
+        return value
 
     def update(self, instance, validated_data):
         women_health_payload = validated_data.pop('women_health', None)
@@ -114,6 +125,8 @@ class ChatSerializer(serializers.Serializer):
 
 class FoodSearchSerializer(serializers.Serializer):
     query = serializers.CharField()
+    # Amount eaten; nutrition is looked up per 100 g and scaled to this.
+    grams = serializers.FloatField(required=False, min_value=1, max_value=5000)
 
 
 class WorkoutSessionSerializer(serializers.ModelSerializer):
@@ -200,9 +213,27 @@ class MusicSerializer(serializers.Serializer):
 
 
 class ProgressPhotoSerializer(serializers.ModelSerializer):
+    """Full photo (used for upload and for opening a single photo)."""
+
     class Meta:
         model = ProgressPhoto
         fields = ['id', 'image_url', 'note', 'created_at']
+
+
+class ProgressPhotoListSerializer(serializers.ModelSerializer):
+    """Gallery listing: thumbnail only, never the full-size image."""
+
+    thumbnail_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProgressPhoto
+        fields = ['id', 'thumbnail_url', 'note', 'created_at']
+
+    def get_thumbnail_url(self, photo):
+        if photo.thumbnail:
+            return photo.thumbnail
+        # Linked (http) images are already lightweight references.
+        return photo.image_url if not photo.image_url.startswith('data:') else ''
 
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):

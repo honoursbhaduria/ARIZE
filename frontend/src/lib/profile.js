@@ -25,7 +25,7 @@ const toNumberOrNull = (raw) => {
 // The API rejects "" for numeric/date fields; send null (or a number) instead.
 export function cleanProfilePayload(profile) {
   const payload = { ...profile }
-  ;['age', 'weight'].forEach((key) => {
+  ;['age', 'weight', 'height'].forEach((key) => {
     if (key in payload) payload[key] = toNumberOrNull(payload[key])
   })
   if (payload.women_health) {

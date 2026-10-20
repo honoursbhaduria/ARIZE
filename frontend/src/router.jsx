@@ -93,7 +93,9 @@ const appChildren = [
   child('/heart-health', () => import('./pages/HeartHealth')),
   child('/gallery', () => import('./pages/ProgressGallery'), prefetch(progressPhotosQuery)),
   child('/analytics', () => import('./pages/Analytics'), prefetch(overviewQuery, leaderboardQuery, workoutSessionsQuery, nutritionLogsQuery)),
-  child('/integrations', () => import('./pages/Integrations')),
+  child('/music', () => import('./pages/Music')),
+  // Old name for the music page; keep links working.
+  createRoute({ getParentRoute: () => appRoute, path: '/integrations', beforeLoad: () => { throw redirect({ to: '/music' }) } }),
   child('/settings', () => import('./pages/Settings'), prefetch(notificationPrefsQuery)),
   child('/vision', () => import('./pages/ComputerVision'), prefetch(exerciseLibraryQuery)),
   child('/shopping-cart', () => import('./pages/Cart'), prefetch(cartQuery)),

@@ -4,6 +4,18 @@ import { API, collectErrors, signedInPage } from './helpers'
 // 1x1 PNG for upload tests
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
+// 20 s of silent 8 kHz mono WAV so the <audio> element really plays in tests.
+const SILENT_WAV = (() => {
+  const samples = 8000 * 20
+  const buf = Buffer.alloc(44 + samples, 128)
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + samples, 4); buf.write('WAVEfmt ', 8)
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22)
+  buf.writeUInt32LE(8000, 24); buf.writeUInt32LE(8000, 28); buf.writeUInt16LE(1, 32); buf.writeUInt16LE(8, 34)
+  buf.write('data', 36); buf.writeUInt32LE(samples, 40)
+  return buf
+})()
+const mockStream = (page) => page.route('http://127.0.0.1:9/**', (route) => route.fulfill({ body: SILENT_WAV, contentType: 'audio/wav' }))
+
 test.describe('app features', () => {
   test('every app page loads without errors', async ({ page, request }) => {
     const errors = collectErrors(page)
@@ -18,7 +30,7 @@ test.describe('app features', () => {
       ['/shopping-cart', 'Wish List'],
       ['/analytics', 'Stats & Streaks'],
       ['/gallery', 'Progress Gallery'],
-      ['/integrations', 'Integrations'],
+      ['/music', 'Music'],
       ['/settings', 'Settings'],
       ['/posture-reading?topic=Squat', 'Squat'],
     ]
@@ -78,8 +90,8 @@ test.describe('app features', () => {
     await expect(page.getByText('Profile updated')).toBeVisible()
 
     await page.goto('/dashboard')
-    // 63 / 1.7² = 21.8 → Normal
-    await expect(page.getByText('21.8', { exact: true })).toBeVisible()
+    // 63 / 1.7² = 21.8 → Normal (no height yet, so the 170 cm fallback is used)
+    await expect(page.getByText('21.8', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('Normal', { exact: true }).first()).toBeVisible()
   })
 
@@ -204,6 +216,55 @@ test.describe('app features', () => {
     await page.getByRole('button', { name: 'More reps' }).click()
     await expect(page.getByLabel('Target reps')).toHaveValue('21')
     await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  test('music keeps playing while you move around the app (Audius mocked)', async ({ page, request }) => {
+    const track = { id: 't1', title: 'Test Lift Track', artist: 'Test Artist', duration: 180, artwork: '', permalink: 'https://audius.co/t', stream_url: 'http://127.0.0.1:9/silence.mp3' }
+    await page.route(`${API}/music/recommend/`, (route) =>
+      route.fulfill({ json: { mood: 'cardio', provider: 'audius', playlist_name: 'Cardio Pulse', tracks: [track, { ...track, id: 't2', title: 'Second Track' }] } }))
+    await mockStream(page)
+    await signedInPage(page, request, 'music')
+    await page.goto('/integrations')
+    await expect(page).toHaveURL(/\/music$/)
+    await page.getByRole('button', { name: /Cardio/ }).click()
+    await expect(page.locator('.player__title')).toBeVisible()
+    await expect(page.getByText('Up next')).toBeVisible()
+    await expect(page.locator('iframe')).toHaveCount(0)
+
+    await page.getByRole('complementary', { name: 'Main navigation' }).getByRole('link', { name: 'Workout Coach' }).click()
+    await expect(page).toHaveURL(/\/counter$/)
+    const bar = page.getByRole('complementary', { name: 'Music player' })
+    await expect(bar).toBeVisible()
+    await bar.getByRole('button', { name: 'Stop music' }).click()
+    await expect(bar).toBeHidden()
+  })
+
+  test('music: search for a song and play it (Audius mocked)', async ({ page, request }) => {
+    const song = { id: 's1', title: 'Lose Yourself', artist: 'Eminem', duration: 320, artwork: '', permalink: '', stream_url: 'http://127.0.0.1:9/silence.mp3' }
+    await page.route(`${API}/music/search/**`, (route) => route.fulfill({ json: { query: 'eminem', tracks: [song, { ...song, id: 's2', title: 'Till I Collapse' }] } }))
+    await mockStream(page)
+    await signedInPage(page, request, 'msearch')
+    await page.goto('/music')
+    await page.getByLabel('Search songs').fill('eminem')
+    await page.getByLabel('Search songs').press('Enter')
+    await page.getByRole('button', { name: 'Play Lose Yourself by Eminem' }).click()
+    await expect(page.locator('.player__title')).toHaveText('Lose Yourself')
+    await expect(page.getByRole('link', { name: /on Audius/ })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Mute' }).click()
+    await expect(page.getByRole('button', { name: 'Unmute' })).toBeVisible()
+  })
+
+  test('settings: pick a city from the worldwide location search (search mocked)', async ({ page, request }) => {
+    await page.route(`${API}/locations/search/**`, (route) =>
+      route.fulfill({ json: { results: [{ id: 1, label: 'Kyoto, Japan', name: 'Kyoto', region: '', country: 'Japan', country_code: 'JP' }] } }))
+    await signedInPage(page, request, 'city')
+    await page.goto('/settings')
+    await page.getByLabel('Search for your city').fill('kyo')
+    await page.getByRole('option', { name: 'Kyoto, Japan' }).click()
+    await page.getByRole('button', { name: 'Save profile' }).click()
+    await expect(page.getByText('Profile updated')).toBeVisible()
+    await page.reload()
+    await expect(page.getByText('Kyoto, Japan')).toBeVisible()
   })
 
   test('unknown routes show the 404 page', async ({ page }) => {

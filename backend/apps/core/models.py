@@ -29,6 +29,7 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     age = models.PositiveIntegerField(null=True, blank=True)
     weight = models.FloatField(null=True, blank=True)
+    height = models.FloatField(null=True, blank=True, help_text='Height in centimetres')
     district = models.CharField(max_length=80, default='global')
     goal = models.CharField(max_length=32, choices=GOAL_CHOICES, default='maintenance')
     diet_type = models.CharField(max_length=32, choices=DIET_CHOICES, default='vegetarian')
@@ -139,6 +140,8 @@ class MusicRecommendation(models.Model):
 class ProgressPhoto(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='progress_photos')
     image_url = models.TextField() # Changed from URLField to support Base64
+    # Small JPEG data URL for the gallery grid, so listing photos stays light.
+    thumbnail = models.TextField(blank=True, default='')
     note = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

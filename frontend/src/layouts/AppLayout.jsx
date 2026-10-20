@@ -5,6 +5,7 @@ import { Flame, LayoutGrid, LogOut, Star, UserRound } from 'lucide-react'
 import { clearAuthSession, getCurrentUser } from '../services/api'
 import { profileQuery, usePlayerStats } from '../lib/queries'
 import Logo from '../components/Logo'
+import MusicProvider from '../components/MusicProvider'
 import { Modal } from '../ui/Modal'
 import { ProgressBar } from '../ui/components'
 import { NAV_GROUPS, TAB_ITEMS, titleForPath } from './nav'
@@ -55,6 +56,7 @@ export default function AppLayout() {
   const moreActive = !TAB_ITEMS.some((item) => pathname.startsWith(item.to))
 
   return (
+    <MusicProvider>
     <div className="shell">
       {isLoading && <div className="route-progress" aria-hidden="true" />}
 
@@ -152,5 +154,6 @@ export default function AppLayout() {
       </Modal>
 
     </div>
+    </MusicProvider>
   )
 }

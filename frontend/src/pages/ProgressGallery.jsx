@@ -3,13 +3,28 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Calendar, Camera, Plus, Upload } from 'lucide-react'
 import { logActivity } from '../services/activityFeed'
-import { progressPhotosQuery, useUploadProgressPhoto } from '../lib/queries'
+import { progressPhotoQuery, progressPhotosQuery, useUploadProgressPhoto } from '../lib/queries'
 import { resizeImageToDataUrl } from '../lib/image'
 import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Skeleton } from '../ui/components'
 import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/toast-context'
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '')
+
+// Shows the thumbnail straight away, then swaps in the full-size photo once loaded.
+function PhotoViewer({ photo }) {
+  const full = useQuery({ ...progressPhotoQuery(photo.id), enabled: Boolean(photo.id) })
+  const src = full.data?.image_url || photo.thumbnail_url || photo.image_url
+  return (
+    <div className="stack">
+      <div style={{ position: 'relative' }}>
+        <img src={src} alt={photo.note || 'Progress photo'} style={{ width: '100%', maxHeight: '70dvh', objectFit: 'contain', borderRadius: 14, background: '#000' }} />
+        {full.isLoading && <span className="spinner" style={{ position: 'absolute', top: 12, right: 12 }} />}
+      </div>
+      {photo.note && <p className="gold" style={{ fontWeight: 600 }}>{photo.note}</p>}
+    </div>
+  )
+}
 
 export default function ProgressGallery() {
   const toast = useToast()
@@ -105,7 +120,7 @@ export default function ProgressGallery() {
               onClick={() => setSelected(photo)}
               aria-label={`Open photo from ${formatDate(photo.created_at)}`}
             >
-              <img src={photo.image_url} alt={photo.note || 'Progress photo'} loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={photo.thumbnail_url || photo.image_url} alt={photo.note || 'Progress photo'} loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
               <span style={{ position: 'absolute', inset: 'auto 0 0 0', padding: 14, background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}>
                 <span className="eyebrow gold row" style={{ gap: 6 }}><Calendar size={12} /> {formatDate(photo.created_at)}</span>
                 {photo.note && <span className="small" style={{ display: 'block', marginTop: 4, fontWeight: 600 }}>{photo.note}</span>}
@@ -136,12 +151,7 @@ export default function ProgressGallery() {
       </Modal>
 
       <Modal open={!!selected} onClose={() => setSelected(null)} title={formatDate(selected?.created_at)} wide>
-        {selected && (
-          <div className="stack">
-            <img src={selected.image_url} alt={selected.note || 'Progress photo'} style={{ width: '100%', maxHeight: '70dvh', objectFit: 'contain', borderRadius: 14, background: '#000' }} />
-            {selected.note && <p className="gold" style={{ fontWeight: 600 }}>{selected.note}</p>}
-          </div>
-        )}
+        {selected && <PhotoViewer photo={selected} />}
       </Modal>
     </div>
   )

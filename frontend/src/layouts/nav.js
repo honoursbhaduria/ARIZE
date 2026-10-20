@@ -4,11 +4,11 @@ import {
   Flame,
   HeartPulse,
   Home,
+  Music,
   MessageSquare,
   ScanLine,
   Settings,
   ShoppingCart,
-  Smartphone,
   Utensils,
 } from 'lucide-react'
 
@@ -20,6 +20,7 @@ export const NAV_GROUPS = [
       { to: '/counter', label: 'Workout Coach', short: 'Train', icon: Dumbbell },
       { to: '/vision', label: 'Vision Lab', short: 'Vision', icon: ScanLine },
       { to: '/chat', label: 'AI Coach', short: 'Coach', icon: MessageSquare },
+      { to: '/music', label: 'Music', short: 'Music', icon: Music },
     ],
   },
   {
@@ -40,7 +41,6 @@ export const NAV_GROUPS = [
   {
     title: 'Setup',
     items: [
-      { to: '/integrations', label: 'Integrations', short: 'Sync', icon: Smartphone },
       { to: '/settings', label: 'Settings', short: 'Settings', icon: Settings },
     ],
   },

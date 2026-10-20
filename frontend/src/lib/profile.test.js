@@ -7,7 +7,11 @@ describe('cleanProfilePayload', () => {
   })
 
   it('converts numeric strings to numbers', () => {
-    expect(cleanProfilePayload({ age: '27', weight: '71.5' })).toEqual({ age: 27, weight: 71.5 })
+    expect(cleanProfilePayload({ age: '27', weight: '71.5', height: '178.5' })).toEqual({ age: 27, weight: 71.5, height: 178.5 })
+  })
+
+  it('sends null for an empty height', () => {
+    expect(cleanProfilePayload({ height: '' })).toEqual({ height: null })
   })
 
   it('cleans women health fields and drops the key when not provided', () => {
