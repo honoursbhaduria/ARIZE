@@ -67,7 +67,6 @@ from .services import (
     gymnasium_workout_analysis,
     ai_workout_analysis,
     consistency_feedback,
-    mood_playlist,
     shopping_suggestions,
     pseudo_embedding,
     fastapi_post,
@@ -1080,6 +1079,9 @@ class ProgressPhotoView(APIView):
 _LOCATION_CACHE = {}
 
 
+OPEN_METEO_GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search'  # free, no key needed
+
+
 class LocationSearchView(APIView):
     """Worldwide place search for the profile district (Open-Meteo geocoding, GeoNames data)."""
 
@@ -1092,7 +1094,7 @@ class LocationSearchView(APIView):
             return Response({'results': _LOCATION_CACHE[key]})
         try:
             response = httpx.get(
-                'https://geocoding-api.open-meteo.com/v1/search',
+                OPEN_METEO_GEOCODING_URL,
                 params={'name': query, 'count': 10, 'language': 'en', 'format': 'json'},
                 timeout=6,
             )

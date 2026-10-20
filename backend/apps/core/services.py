@@ -1109,6 +1109,7 @@ def consistency_feedback(missed_workouts: int, previous_score: int, current_scor
 
 
 # ---------- Audius (free, open music streaming; no API key) ----------
+AUDIUS_API = 'https://api.audius.co'  # free public gateway, no key needed
 AUDIUS_APP_NAME = 'ARIZE'
 AUDIUS_MOOD_QUERIES = {
     'cardio': ['cardio workout', 'running music', 'edm workout'],
@@ -1121,21 +1122,7 @@ AUDIUS_MOOD_TITLES = {
     'cardio': 'Cardio Pulse', 'strength': 'Heavy Lift Drive', 'hiit': 'HIIT Fuel',
     'relax': 'Recovery Lo-fi', 'yoga': 'Yoga Flow',
 }
-_AUDIUS_HOST = {'url': None, 'at': 0.0}
 _AUDIUS_MOOD_CACHE = {}  # mood -> (fetched_at, tracks)
-
-
-def _audius_host():
-    """Discovery: api.audius.co lists healthy API hosts; reuse one for 10 minutes."""
-    now = time.time()
-    if _AUDIUS_HOST['url'] and now - _AUDIUS_HOST['at'] < 600:
-        return _AUDIUS_HOST['url']
-    with _open_url_with_ssl(Request('https://api.audius.co', headers={'User-Agent': WIKIPEDIA_USER_AGENT}), timeout=6) as res:
-        hosts = json.loads(res.read().decode('utf-8')).get('data') or []
-    if not hosts:
-        raise RuntimeError('No Audius hosts available')
-    _AUDIUS_HOST.update(url=hosts[0].rstrip('/'), at=now)
-    return _AUDIUS_HOST['url']
 
 
 def _audius_search(host: str, query: str, limit: int):
@@ -1178,7 +1165,7 @@ def audius_mood_tracks(mood: str, limit: int = 20):
         random.shuffle(tracks)
         return tracks
 
-    host = _audius_host()
+    host = AUDIUS_API
     queries = AUDIUS_MOOD_QUERIES.get(mood, ['workout'])
     with ThreadPoolExecutor(max_workers=len(queries)) as pool:  # searches in parallel
         batches = list(pool.map(lambda q: _audius_search(host, q, limit), queries))
@@ -1201,7 +1188,7 @@ def audius_search_tracks(query: str, limit: int = 20):
     cached = _AUDIUS_SEARCH_CACHE.get(key)
     if cached and time.time() - cached[0] < 600:
         return list(cached[1])
-    host = _audius_host()
+    host = AUDIUS_API
     tracks = _audius_tracks(host, _audius_search(host, query.strip(), limit))
     if len(_AUDIUS_SEARCH_CACHE) < 500:
         _AUDIUS_SEARCH_CACHE[key] = (time.time(), list(tracks))
