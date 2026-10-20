@@ -1,246 +1,225 @@
-import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { 
-  User, 
-  Bell, 
-  Camera, 
-  Shield, 
-  Smartphone, 
-  Save,
-  CheckCircle2
-} from 'lucide-react'
-import { 
-  fetchProfile, 
-  updateProfile, 
-  fetchNotificationPreferences, 
-  updateNotificationPreferences,
-  uploadProgressPhoto 
-} from '../services/api'
+import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Bell, Camera, KeyRound, Save, Shield, User } from 'lucide-react'
+import { changePassword } from '../services/api'
 import { logActivity } from '../services/activityFeed'
+import { notificationPrefsQuery, profileQuery, useUpdateNotificationPrefs, useUpdateProfile, useUploadProgressPhoto } from '../lib/queries'
+import { DIET_OPTIONS, GENDER_OPTIONS, GOAL_OPTIONS, cleanProfilePayload } from '../lib/profile'
+import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Select, Skeleton, Switch } from '../ui/components'
+import { Modal } from '../ui/Modal'
+import { useToast } from '../ui/toast-context'
 
-export default function Settings() {
-  const [profile, setProfile] = useState({ age: '', weight: '', district: 'global', goal: 'maintenance', diet_type: 'vegetarian' })
-  const [prefs, setPrefs] = useState({ workout_reminders: true, streak_alerts: true, diet_suggestions: true, whatsapp_updates: false })
-  const [photoForm, setPhotoForm] = useState({ image_url: '', note: '' })
-  const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState('')
+const ACTIVITY_OPTIONS = [
+  { value: 'sedentary', label: '0–1 sessions / week' },
+  { value: 'moderate', label: '2–4 sessions / week' },
+  { value: 'heavy', label: '5+ sessions / week' },
+]
 
-  useEffect(() => {
-    async function load() {
-      const [p, n] = await Promise.all([fetchProfile(), fetchNotificationPreferences()])
-      if (p) setProfile({
-        age: p.age ?? '',
-        weight: p.weight ?? '',
-        district: p.district || 'global',
-        goal: p.goal || 'maintenance',
-        diet_type: p.diet_type || 'vegetarian'
-      })
-      if (n) setPrefs(n)
-    }
-    load()
-  }, [])
+const PREF_ITEMS = [
+  { key: 'workout_reminders', label: 'Workout reminders', hint: 'A nudge when it’s time to train' },
+  { key: 'streak_alerts', label: 'Streak alerts', hint: 'Warnings before your streak breaks' },
+  { key: 'diet_suggestions', label: 'Diet suggestions', hint: 'Meal ideas based on your goal' },
+  { key: 'whatsapp_updates', label: 'WhatsApp updates', hint: 'Weekly progress summaries' },
+]
 
-  const handleSaveProfile = async () => {
-    setSaving(true)
-    try {
-      await updateProfile(profile)
-      showSuccess('Profile updated')
-         logActivity({
-            source: 'Settings',
-            action: 'Profile updated',
-            details: `Goal: ${profile.goal}, diet: ${profile.diet_type}, district: ${profile.district}`,
-            meta: {
-               goal: profile.goal,
-               diet_type: profile.diet_type,
-               district: profile.district,
-            }
-         })
-    } catch (e) {}
-    finally { setSaving(false) }
-  }
+function ProfileForm({ initial }) {
+  const toast = useToast()
+  const update = useUpdateProfile()
+  const [profile, setProfile] = useState(() => ({
+    age: initial?.age ?? '',
+    weight: initial?.weight ?? '',
+    district: initial?.district || 'global',
+    goal: initial?.goal || 'maintenance',
+    diet_type: initial?.diet_type || 'vegetarian',
+    gender: initial?.gender || 'other',
+    activity_level: initial?.activity_level || 'moderate',
+  }))
+  const set = (key) => (event) => setProfile((prev) => ({ ...prev, [key]: event.target.value }))
 
-  const handleSavePrefs = async () => {
-    setSaving(true)
-    try {
-      await updateNotificationPreferences(prefs)
-      showSuccess('Preferences saved')
-         const enabled = Object.entries(prefs)
-            .filter(([, value]) => !!value)
-            .map(([key]) => key)
-         logActivity({
-            source: 'Settings',
-            action: 'Notification preferences updated',
-            details: enabled.length ? `Enabled: ${enabled.join(', ')}` : 'All reminders turned off.',
-            meta: { enabled }
-         })
-    } catch (e) {}
-    finally { setSaving(false) }
-  }
-
-  const showSuccess = (msg) => {
-    setSuccess(msg)
-    setTimeout(() => setSuccess(''), 3000)
-  }
-
-  const inputStyle = {
-    width: '100%',
-    background: 'var(--surface-hover)',
-    border: '1px solid var(--border)',
-    padding: '0.75rem',
-    color: 'var(--text-primary)',
-    borderRadius: 'var(--radius)',
-    fontSize: '0.875rem'
+  const save = (event) => {
+    event.preventDefault()
+    update.mutate(cleanProfilePayload(profile), {
+      onSuccess: () => {
+        toast.success('Profile updated')
+        logActivity({
+          source: 'Settings',
+          action: 'Profile updated',
+          details: `Goal: ${profile.goal}, diet: ${profile.diet_type}, district: ${profile.district}`,
+          meta: { goal: profile.goal, diet_type: profile.diet_type, district: profile.district },
+        })
+      },
+      onError: (err) => toast.error(err.message || 'Could not save profile'),
+    })
   }
 
   return (
-    <motion.div 
-      className="grid-dashboard"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-    >
-      <div style={{ gridColumn: 'span 12', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Settings</h1>
-          <p className="text-muted">Manage your account and app preferences.</p>
+    <form className="stack" onSubmit={save}>
+      <div className="grid-2">
+        <Field label="Age" htmlFor="s-age"><Input id="s-age" type="number" inputMode="numeric" min={0} value={profile.age} onChange={set('age')} /></Field>
+        <Field label="Weight (kg)" htmlFor="s-weight"><Input id="s-weight" type="number" inputMode="decimal" min={0} step="0.1" value={profile.weight} onChange={set('weight')} /></Field>
+        <Field label="Gender" htmlFor="s-gender"><Select id="s-gender" options={GENDER_OPTIONS} value={profile.gender} onChange={set('gender')} /></Field>
+        <Field label="Training level" htmlFor="s-activity"><Select id="s-activity" options={ACTIVITY_OPTIONS} value={profile.activity_level} onChange={set('activity_level')} /></Field>
+        <Field label="Goal" htmlFor="s-goal"><Select id="s-goal" options={GOAL_OPTIONS} value={profile.goal} onChange={set('goal')} /></Field>
+        <Field label="Diet type" htmlFor="s-diet"><Select id="s-diet" options={DIET_OPTIONS} value={profile.diet_type} onChange={set('diet_type')} /></Field>
+      </div>
+      <Field label="District" htmlFor="s-district" hint="Used for your local leaderboard">
+        <Input id="s-district" value={profile.district} onChange={set('district')} maxLength={80} />
+      </Field>
+      <Button type="submit" variant="primary" icon={Save} loading={update.isPending} block>Save profile</Button>
+    </form>
+  )
+}
+
+function PreferencesForm({ initial }) {
+  const toast = useToast()
+  const update = useUpdateNotificationPrefs()
+  const [prefs, setPrefs] = useState(() => ({
+    workout_reminders: true,
+    streak_alerts: true,
+    diet_suggestions: true,
+    whatsapp_updates: false,
+    ...(initial || {}),
+  }))
+
+  const save = () =>
+    update.mutate(prefs, {
+      onSuccess: () => {
+        toast.success('Preferences saved')
+        const enabled = PREF_ITEMS.filter((item) => prefs[item.key]).map((item) => item.key)
+        logActivity({
+          source: 'Settings',
+          action: 'Notification preferences updated',
+          details: enabled.length ? `Enabled: ${enabled.join(', ')}` : 'All reminders turned off.',
+          meta: { enabled },
+        })
+      },
+      onError: (err) => toast.error(err.message || 'Could not save preferences'),
+    })
+
+  return (
+    <div className="stack">
+      <ul className="list">
+        {PREF_ITEMS.map((item) => (
+          <li key={item.key} className="list-row">
+            <label htmlFor={`pref-${item.key}`} className="grow" style={{ cursor: 'pointer' }}>
+              <strong style={{ display: 'block' }}>{item.label}</strong>
+              <span className="tiny muted">{item.hint}</span>
+            </label>
+            <Switch id={`pref-${item.key}`} label={item.label} checked={prefs[item.key]} onChange={(checked) => setPrefs((prev) => ({ ...prev, [item.key]: checked }))} />
+          </li>
+        ))}
+      </ul>
+      <Button variant="violet" loading={update.isPending} onClick={save} block>Update preferences</Button>
+    </div>
+  )
+}
+
+function PhotoByUrl() {
+  const toast = useToast()
+  const upload = useUploadProgressPhoto()
+  const [form, setForm] = useState({ image_url: '', note: '' })
+
+  const submit = (event) => {
+    event.preventDefault()
+    if (!/^https?:\/\//i.test(form.image_url.trim())) {
+      toast.error('Enter a full image URL starting with http(s)://')
+      return
+    }
+    upload.mutate({ image_url: form.image_url.trim(), note: form.note }, {
+      onSuccess: () => {
+        toast.success('Photo added to your gallery')
+        logActivity({ source: 'Progress Gallery', action: 'Photo uploaded', details: form.note ? `Entry added: ${form.note}` : 'New progress photo added.', meta: { note: form.note } })
+        setForm({ image_url: '', note: '' })
+      },
+      onError: (err) => toast.error(err.message || 'Upload failed'),
+    })
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <Field label="Image URL" htmlFor="photo-url"><Input id="photo-url" type="url" placeholder="https://…" value={form.image_url} onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))} /></Field>
+      <Field label="Note (optional)" htmlFor="photo-url-note"><Input id="photo-url-note" value={form.note} maxLength={255} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} /></Field>
+      <Button type="submit" variant="ghost" loading={upload.isPending} disabled={!form.image_url.trim()} block>Add progress photo</Button>
+    </form>
+  )
+}
+
+function ChangePasswordModal({ open, onClose }) {
+  const toast = useToast()
+  const [form, setForm] = useState({ current: '', next: '', confirm: '' })
+  const [error, setError] = useState('')
+  const mutation = useMutation({
+    mutationFn: () => changePassword({ currentPassword: form.current, newPassword: form.next }),
+    onSuccess: () => {
+      toast.success('Password updated')
+      setForm({ current: '', next: '', confirm: '' })
+      onClose()
+    },
+    onError: (err) => setError(err.message || 'Could not update password'),
+  })
+
+  const submit = (event) => {
+    event.preventDefault()
+    setError('')
+    if (form.next.length < 8) return setError('New password must be at least 8 characters.')
+    if (form.next !== form.confirm) return setError('New passwords do not match.')
+    mutation.mutate()
+  }
+
+  const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }))
+
+  return (
+    <Modal open={open} onClose={onClose} title="Change password">
+      <form className="stack" onSubmit={submit}>
+        <Field label="Current password" htmlFor="pw-current" hint="Leave blank if you signed up with Google">
+          <Input id="pw-current" type="password" autoComplete="current-password" value={form.current} onChange={set('current')} />
+        </Field>
+        <Field label="New password" htmlFor="pw-new"><Input id="pw-new" type="password" autoComplete="new-password" value={form.next} onChange={set('next')} /></Field>
+        <Field label="Confirm new password" htmlFor="pw-confirm"><Input id="pw-confirm" type="password" autoComplete="new-password" value={form.confirm} onChange={set('confirm')} /></Field>
+        {error && <Alert tone="error">{error}</Alert>}
+        <Button type="submit" variant="primary" loading={mutation.isPending} block>Update password</Button>
+      </form>
+    </Modal>
+  )
+}
+
+export default function Settings() {
+  const profile = useQuery(profileQuery)
+  const prefs = useQuery(notificationPrefsQuery)
+  const [passwordOpen, setPasswordOpen] = useState(false)
+
+  return (
+    <div className="page">
+      <PageHeader eyebrow="Character sheet" title="Settings" subtitle="Your profile, alerts and account security." />
+
+      <div className="split">
+        <div className="stack">
+          <Card>
+            <CardHeader icon={User} title="Profile" subtitle="Used to personalise coaching, BMI and leaderboards" />
+            {profile.isLoading ? <Skeleton height={320} /> : profile.isError ? <Alert tone="error">{profile.error.message}</Alert> : <ProfileForm initial={profile.data} />}
+          </Card>
+
+          <Card>
+            <CardHeader icon={Shield} tone="green" title="Security" />
+            <p className="small muted" style={{ marginBottom: 14 }}>Your session uses signed tokens and passwords are never stored in plain text.</p>
+            <Button variant="ghost" icon={KeyRound} onClick={() => setPasswordOpen(true)} block>Change password</Button>
+          </Card>
         </div>
-        {success && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4ade80', fontSize: '0.875rem', fontWeight: 600, padding: '0.5rem 1rem', background: 'rgba(74, 222, 128, 0.1)', borderRadius: 'var(--radius)' }}>
-            <CheckCircle2 size={16} /> {success}
-          </div>
-        )}
+
+        <div className="stack">
+          <Card>
+            <CardHeader icon={Bell} tone="violet" title="Alert center" />
+            {prefs.isLoading ? <Skeleton height={260} /> : <PreferencesForm initial={prefs.data} />}
+          </Card>
+
+          <Card>
+            <CardHeader icon={Camera} tone="orange" title="Add photo by link" subtitle="Or upload from your device in Progress Gallery" />
+            <PhotoByUrl />
+          </Card>
+        </div>
       </div>
 
-      {/* Profile Settings */}
-      <div style={{ gridColumn: 'span 7', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-         <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-               <User size={18} />
-               <h3 style={{ fontSize: '1.125rem' }}>Profile Configuration</h3>
-            </div>
-            
-            <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Age</label>
-                  <input value={profile.age} onChange={e => setProfile({...profile, age: e.target.value})} style={inputStyle} />
-               </div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Weight (kg)</label>
-                  <input value={profile.weight} onChange={e => setProfile({...profile, weight: e.target.value})} style={inputStyle} />
-               </div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>District</label>
-                  <input value={profile.district} onChange={e => setProfile({...profile, district: e.target.value})} style={inputStyle} />
-               </div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Goal</label>
-                  <select value={profile.goal} onChange={e => setProfile({...profile, goal: e.target.value})} style={inputStyle}>
-                     <option value="muscle_gain">Muscle Gain</option>
-                     <option value="fat_loss">Fat Loss</option>
-                     <option value="maintenance">Maintenance</option>
-                  </select>
-               </div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: 'span 2' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Diet Type</label>
-                  <select value={profile.diet_type} onChange={e => setProfile({...profile, diet_type: e.target.value})} style={inputStyle}>
-                     <option value="vegetarian">Vegetarian</option>
-                     <option value="non_veg">Non-Veg</option>
-                     <option value="vegan">Vegan</option>
-                  </select>
-               </div>
-            </div>
-            
-            <button onClick={handleSaveProfile} disabled={saving} className="btn-primary" style={{ marginTop: '2rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-               <Save size={16} /> Save Profile
-            </button>
-         </div>
-
-         <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-               <Shield size={18} />
-               <h3 style={{ fontSize: '1.125rem' }}>Security & Privacy</h3>
-            </div>
-            <p className="text-muted" style={{ fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
-               Your account is protected with JWT session tokens. We don't store your plain text passwords.
-            </p>
-            <button className="btn-secondary" style={{ width: '100%' }}>Change Password</button>
-         </div>
-      </div>
-
-      {/* Preferences & Photos */}
-      <div style={{ gridColumn: 'span 5', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-         <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-               <Bell size={18} />
-               <h3 style={{ fontSize: '1.125rem' }}>Alert Center</h3>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-               {[
-                  { key: 'workout_reminders', label: 'Workout Reminders' },
-                  { key: 'streak_alerts', label: 'Streak Alerts' },
-                  { key: 'diet_suggestions', label: 'Diet Suggestions' },
-                  { key: 'whatsapp_updates', label: 'WhatsApp Updates' },
-               ].map(item => (
-                  <label key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '0.5rem 0' }}>
-                     <span style={{ fontSize: '0.875rem' }}>{item.label}</span>
-                     <div style={{ position: 'relative' }}>
-                        <input 
-                           type="checkbox" 
-                           checked={prefs[item.key]} 
-                           onChange={e => setPrefs({...prefs, [item.key]: e.target.checked})}
-                           style={{ display: 'none' }}
-                        />
-                        <div style={{ 
-                           width: '40px', 
-                           height: '20px', 
-                           background: prefs[item.key] ? 'var(--accent)' : 'var(--surface-hover)', 
-                           borderRadius: '10px',
-                           border: '1px solid var(--border)',
-                           transition: 'all 0.2s ease'
-                        }}>
-                           <div style={{ 
-                              width: '14px', 
-                              height: '14px', 
-                              background: prefs[item.key] ? 'var(--bg)' : 'var(--text-secondary)', 
-                              borderRadius: '50%',
-                              position: 'absolute',
-                              top: '3px',
-                              left: prefs[item.key] ? '23px' : '3px',
-                              transition: 'all 0.2s ease'
-                           }} />
-                        </div>
-                     </div>
-                  </label>
-               ))}
-            </div>
-            
-            <button onClick={handleSavePrefs} disabled={saving} className="btn-secondary" style={{ marginTop: '2rem', width: '100%' }}>
-               Update Preferences
-            </button>
-         </div>
-
-         <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-               <Camera size={18} />
-               <h3 style={{ fontSize: '1.125rem' }}>Visual Progress</h3>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-               <input 
-                  placeholder="Image URL" 
-                  value={photoForm.image_url}
-                  onChange={e => setPhotoForm({...photoForm, image_url: e.target.value})}
-                  style={inputStyle} 
-               />
-               <input 
-                  placeholder="Note (optional)" 
-                  value={photoForm.note}
-                  onChange={e => setPhotoForm({...photoForm, note: e.target.value})}
-                  style={inputStyle} 
-               />
-               <button className="btn-secondary" style={{ width: '100%' }}>Upload Progress Photo</button>
-            </div>
-         </div>
-      </div>
-    </motion.div>
+      <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+    </div>
   )
 }

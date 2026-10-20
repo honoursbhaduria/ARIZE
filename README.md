@@ -46,7 +46,7 @@ It combines workout tracking, nutrition analysis, AI coaching, analytics, shoppi
 
 ## Tech Stack
 
-- Frontend: React 19, Vite, React Router, Framer Motion
+- Frontend: React 19, Vite, TanStack Router, TanStack Query, Framer Motion, Recharts
 - Backend: Django 5, Django REST Framework, SimpleJWT
 - AI stack: Groq, LangChain, LangGraph, Gemini integration hooks
 - CV stack: MediaPipe/OpenCV integration hooks
@@ -143,6 +143,22 @@ FastAPI runs at `http://localhost:9000`.
 - `/gallery`
 - `/shopping-cart`
 - `/settings`
+- `/heart-health`, `/posture-reading?topic=Squat`
+
+## Testing
+
+```bash
+# Frontend unit tests (Vitest)
+cd frontend && npm test
+
+# End-to-end tests (Playwright, uses your installed Google Chrome).
+# Starts its own Django API (port 8011) and Vite app (port 5181) on a
+# throwaway SQLite database, so your dev data is never touched.
+cd frontend && npm run test:e2e
+
+# Backend tests
+cd backend && python manage.py test apps.core.tests
+```
 
 ## Core API Surface (Django)
 

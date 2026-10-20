@@ -1,616 +1,361 @@
-import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Flame,
-  Dumbbell,
   Activity,
-  TrendingUp,
-  Plus,
-  CheckCircle2,
-  Clock,
-  ChevronRight,
-  Camera,
-  Settings as SettingsIcon,
-  User,
-  Bell,
-  CalendarClock,
-  Trash2,
-  Save,
   ArrowRight,
+  Camera,
+  Check,
+  CheckCircle2,
+  Dumbbell,
+  Flame,
+  Plus,
+  Settings as SettingsIcon,
+  Smartphone,
   Sparkles,
-  Loader2,
-  Scale
+  Swords,
+  Trash2,
+  TrendingUp,
+  Utensils,
 } from 'lucide-react'
-import BlurText from '../components/BlurText'
+import { generateAIWorkoutPlan, getCurrentUser } from '../services/api'
 import {
-  fetchWorkoutSummary,
-  fetchWorkoutSessions,
-  fetchNutritionLogs,
-  fetchAnalytics,
-  fetchProfile,
-  updateProfile,
-  fetchNotificationPreferences,
-  updateNotificationPreferences,
-  uploadProgressPhoto,
-  saveWorkoutSession,
-  getCurrentUser,
-  generateAIWorkoutPlan,
-} from '../services/api'
+  consistencyQuery,
+  nutritionLogsQuery,
+  profileQuery,
+  usePlayerStats,
+  workoutSessionsQuery,
+  workoutSummaryQuery,
+} from '../lib/queries'
+import { lastSevenDays, todayKey } from '../lib/health'
+import { useWorkoutTasks } from '../lib/workoutTasks'
+import BmiCard from '../components/BmiCard'
+import { Badge, Button, Card, CardHeader, Input, ProgressBar, Skeleton } from '../ui/components'
+import { useToast } from '../ui/toast-context'
 
-const WORKOUT_TASKS_STORAGE_KEY = 'arize_today_workout_tasks_v1'
-const DEFAULT_WORKOUT_TASKS = [
-  { id: 'squats', title: 'Squats', details: '3 sets x 12 reps', reps: 36, done: false },
-  { id: 'pushups', title: 'Push-ups', details: '3 sets x 12 reps', reps: 36, done: false },
-  { id: 'lunges', title: 'Lunges', details: '3 sets x 12 reps per leg', reps: 24, done: false },
-  { id: 'plank', title: 'Plank', details: '3 sets x 30 sec hold', reps: 3, done: false },
-]
-
-function loadSavedWorkoutTasks() {
-  if (typeof window === 'undefined') return DEFAULT_WORKOUT_TASKS
-  try {
-    const raw = localStorage.getItem(WORKOUT_TASKS_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : DEFAULT_WORKOUT_TASKS
-  } catch {
-    return DEFAULT_WORKOUT_TASKS
-  }
-}
-
-function getBMICategory(bmi) {
-  if (bmi < 18.5) return { label: 'Underweight', color: '#60a5fa' }
-  if (bmi < 25) return { label: 'Normal', color: '#4ade80' }
-  if (bmi < 30) return { label: 'Overweight', color: '#fb923c' }
-  return { label: 'Obese', color: '#f87171' }
+function StatTile({ icon: Icon, tone, label, value, hint, loading }) {
+  return (
+    <Card className="stat-card">
+      <span className={`icon-tile icon-tile--${tone}`}><Icon size={20} /></span>
+      <div className="stat">
+        <span className="stat__label">{label}</span>
+        {loading ? <Skeleton height={28} width={80} /> : <span className="stat__value">{value}</span>}
+        {hint && <span className="stat__hint">{hint}</span>}
+      </div>
+    </Card>
+  )
 }
 
 export default function Dashboard() {
-  const user = useMemo(() => getCurrentUser(), [])
-  const [loading, setLoading] = useState(true)
-  const [workoutTasks, setWorkoutTasks] = useState(loadSavedWorkoutTasks)
+  const toast = useToast()
+  const user = getCurrentUser()
+  const stats = usePlayerStats()
+  const summary = useQuery(workoutSummaryQuery)
+  const sessions = useQuery(workoutSessionsQuery)
+  const nutrition = useQuery(nutritionLogsQuery)
+  const consistency = useQuery(consistencyQuery)
+  const profile = useQuery(profileQuery)
+
+  const [tasks, setTasks] = useWorkoutTasks()
   const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [aiPlanPrompt, setAiPlanPrompt] = useState('')
-  const [aiPlanLoading, setAiPlanLoading] = useState(false)
   const [showAiInput, setShowAiInput] = useState(false)
-  const [workoutSummary, setWorkoutSummary] = useState({ total_sessions: 0, total_reps: 0, total_calories_burned: 0, avg_form_score: 0 })
-  const [workoutSessions, setWorkoutSessions] = useState([])
-  const [nutritionLogs, setNutritionLogs] = useState([])
-  const [consistency, setConsistency] = useState({ streak_days: 0, missed_workouts: 0, weekly_consistency_score: 0, feedback: [] })
-  const [profileData, setProfileData] = useState({ age: null, weight: null })
+  const [aiPrompt, setAiPrompt] = useState('')
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true)
-      const results = await Promise.allSettled([
-        fetchWorkoutSummary(),
-        fetchWorkoutSessions(),
-        fetchNutritionLogs(),
-        fetchAnalytics(),
-        fetchProfile(),
-      ])
-
-      const [summary, sessions, nutrition, consistencyRes, profile] = results
-      if (summary.status === 'fulfilled') setWorkoutSummary(summary.value || {})
-      if (sessions.status === 'fulfilled') setWorkoutSessions(Array.isArray(sessions.value) ? sessions.value : [])
-      if (nutrition.status === 'fulfilled') setNutritionLogs(Array.isArray(nutrition.value) ? nutrition.value : [])
-      if (consistencyRes.status === 'fulfilled') setConsistency(consistencyRes.value || {})
-      if (profile.status === 'fulfilled') {
-        const p = profile.value || {}
-        setProfileData({ age: p.age ?? null, weight: p.weight ?? null })
+  const aiPlan = useMutation({
+    mutationFn: (prompt) => generateAIWorkoutPlan(prompt || 'Create a balanced full-body workout for today'),
+    onSuccess: (result) => {
+      if (Array.isArray(result?.plan) && result.plan.length > 0) {
+        setTasks(result.plan)
+        toast.success('New quests generated by your AI coach')
+      } else {
+        toast.error('The AI coach returned an empty plan. Try a different prompt.')
       }
-      setLoading(false)
-    }
-    loadData()
-  }, [])
+      setShowAiInput(false)
+      setAiPrompt('')
+    },
+    onError: (err) => toast.error(err.message || 'AI plan generation failed'),
+  })
 
-  useEffect(() => {
-    localStorage.setItem(WORKOUT_TASKS_STORAGE_KEY, JSON.stringify(workoutTasks))
-  }, [workoutTasks])
+  const today = todayKey()
+  const todaysLogs = useMemo(
+    () => (nutrition.data || []).filter((entry) => (entry.created_at || '').slice(0, 10) === today),
+    [nutrition.data, today],
+  )
+  const todayCalories = todaysLogs.reduce((sum, entry) => sum + Number(entry.calories || 0), 0)
+  const todayProtein = todaysLogs.reduce((sum, entry) => sum + Number(entry.protein || 0), 0)
 
-  useEffect(() => {
-    const handleTasksUpdated = () => {
-      setWorkoutTasks(loadSavedWorkoutTasks())
-    }
-    window.addEventListener('arize_tasks_updated', handleTasksUpdated)
-    return () => window.removeEventListener('arize_tasks_updated', handleTasksUpdated)
-  }, [])
+  const doneCount = tasks.filter((task) => task.done).length
+  const planPct = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0
+  const todayBurned = tasks.filter((task) => task.done).reduce((sum, task) => sum + (task.reps || 15) * 4, 0)
 
-  const todayKey = new Date().toISOString().slice(0, 10)
-  const todayCalories = useMemo(() => {
-    return nutritionLogs
-      .filter((entry) => (entry.created_at || '').slice(0, 10) === todayKey)
-      .reduce((sum, entry) => sum + Number(entry.calories || 0), 0)
-  }, [nutritionLogs, todayKey])
+  const week = useMemo(() => lastSevenDays(sessions.data || []), [sessions.data])
+  const maxDaily = Math.max(1, ...week.map((day) => day.count))
+  const recent = (sessions.data || []).slice(0, 5)
+  const remaining = tasks.length - doneCount
 
-  const todayProtein = useMemo(() => {
-    return nutritionLogs
-      .filter((entry) => (entry.created_at || '').slice(0, 10) === todayKey)
-      .reduce((sum, entry) => sum + Number(entry.protein || 0), 0)
-  }, [nutritionLogs, todayKey])
-
-  const planDoneCount = workoutTasks.filter((task) => task.done).length
-  const planProgressPct = workoutTasks.length > 0 ? Math.round((planDoneCount / workoutTasks.length) * 100) : 0
-
-  const todayBurned = useMemo(() => {
-    return workoutTasks.filter(t => t.done).reduce((sum, t) => sum + ((t.reps || 15) * 4), 0)
-  }, [workoutTasks])
-
-  const metricCardBaseStyle = {
-    gridColumn: 'span 3',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1.25rem',
-    minHeight: '132px',
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundSize: 'cover',
-    backgroundRepeat: 'no-repeat',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+  const toggleTask = (task) => {
+    setTasks((current) => current.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t)))
+    if (!task.done) toast.success(`Quest complete: ${task.title} 🔥`)
   }
 
-  const metricOverlay = 'linear-gradient(120deg, rgba(2, 6, 23, 0.74), rgba(2, 6, 23, 0.38))'
-
-  const metricIconWrapStyle = {
-    background: 'rgba(15, 23, 42, 0.5)',
-    backdropFilter: 'blur(2px)',
-    padding: '0.75rem',
-    borderRadius: 'var(--radius)',
-    position: 'relative',
-    zIndex: 1,
-  }
-
-  const metricContentStyle = {
-    position: 'relative',
-    zIndex: 1,
-  }
-
-  const metricLabelStyle = {
-    fontSize: '0.65rem',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    color: 'rgba(248, 250, 252, 0.86)',
-    letterSpacing: '0.03em',
-  }
-
-  const metricValueStyle = {
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    color: '#ffffff',
-    textShadow: '0 1px 2px rgba(0, 0, 0, 0.38)',
-  }
-
-  const recentActivity = useMemo(() => workoutSessions.slice(0, 5), [workoutSessions])
-
-  // BMI calculation
-  const bmi = useMemo(() => {
-    const { age, weight } = profileData
-    if (!weight) return null
-    const heightM = 1.70 // default height assumption
-    return Math.round((weight / (heightM * heightM)) * 10) / 10
-  }, [profileData])
-
-  const bmiCategory = useMemo(() => bmi ? getBMICategory(bmi) : null, [bmi])
-
-  // 7-day workout heatmap
-  const last7Days = useMemo(() => {
-    const days = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      const key = d.toISOString().slice(0, 10)
-      const dayName = d.toLocaleDateString('en', { weekday: 'short' })
-      const hasWorkout = workoutSessions.some(s => (s.created_at || '').slice(0, 10) === key)
-      days.push({ key, dayName, hasWorkout })
-    }
-    return days
-  }, [workoutSessions])
-
-  // Daily exercise capacity: sessions per day of last 7 days
-  const dailyCapacity = useMemo(() => {
-    return last7Days.map(day => {
-      const count = workoutSessions.filter(s => (s.created_at || '').slice(0, 10) === day.key).length
-      return { ...day, count }
-    })
-  }, [last7Days, workoutSessions])
-
-  const maxDailyCount = useMemo(() => Math.max(...dailyCapacity.map(d => d.count), 1), [dailyCapacity])
-
-  const handleToggleTask = (taskId) => {
-    setWorkoutTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: !t.done } : t))
-  }
-
-  const handleAddTask = () => {
-    if (!newTaskTitle.trim()) return
-    const task = {
-      id: `task-${Date.now()}`,
-      title: newTaskTitle.trim(),
-      details: 'Custom task',
-      reps: 20,
-      done: false,
-    }
-    setWorkoutTasks(prev => [...prev, task])
+  const addTask = (event) => {
+    event.preventDefault()
+    const title = newTaskTitle.trim()
+    if (!title) return
+    setTasks((current) => [...current, { id: `task-${Date.now()}`, title, details: 'Custom quest', reps: 20, done: false }])
     setNewTaskTitle('')
   }
 
-  const handleDeleteTask = (taskId) => {
-    setWorkoutTasks(prev => prev.filter(t => t.id !== taskId))
-  }
+  const deleteTask = (taskId) => setTasks((current) => current.filter((t) => t.id !== taskId))
 
-  const handleGenerateAIPlan = async () => {
-    setAiPlanLoading(true)
-    try {
-      const result = await generateAIWorkoutPlan(aiPlanPrompt || 'Create a balanced full-body workout for today')
-      if (result?.plan && Array.isArray(result.plan) && result.plan.length > 0) {
-        setWorkoutTasks(result.plan)
-      }
-    } catch (e) {
-      console.error('AI plan generation failed', e)
-    } finally {
-      setAiPlanLoading(false)
-      setShowAiInput(false)
-      setAiPlanPrompt('')
-    }
-  }
-
-  const handleHelloAnimationComplete = () => {
-    console.log('Animation completed!')
-  }
+  const statsLoading = summary.isLoading || consistency.isLoading
 
   return (
-    <motion.div
-      className="grid-dashboard"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-    >
-      {/* Header Section */}
-      <div style={{ gridColumn: 'span 12', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <BlurText
-            text={`Hello, ${user?.username || 'User'}`}
-            delay={200}
-            animateBy="words"
-            direction="top"
-            onAnimationComplete={handleHelloAnimationComplete}
-            className="text-2xl mb-8"
-            style={{ fontSize: '2rem', marginBottom: '0.5rem', fontWeight: 700, lineHeight: 1.15 }}
-          />
-          <p className="text-muted">Track your profile, training, and recovery in one place.</p>
-        </div>
-      </div>
-
-      {/* Primary KPI Grid */}
-      <div
-        className="card"
-        style={{
-          ...metricCardBaseStyle,
-          backgroundImage: `${metricOverlay}, url('/image.png')`,
-          backgroundPosition: 'center',
-        }}
-      >
-        <div style={metricIconWrapStyle}>
-          <Flame size={20} />
-        </div>
-        <div style={metricContentStyle}>
-          <div style={metricLabelStyle}>Streak</div>
-          <div style={metricValueStyle}>{consistency.streak_days || 0} Days</div>
-        </div>
-      </div>
-
-      <div
-        className="card"
-        style={{
-          ...metricCardBaseStyle,
-          backgroundImage: `${metricOverlay}, url('/dashboard-gym-sequence.png')`,
-          backgroundPosition: 'center right',
-        }}
-      >
-        <div style={metricIconWrapStyle}>
-          <Flame size={20} style={{ color: '#fb923c' }} />
-        </div>
-        <div style={metricContentStyle}>
-          <div style={metricLabelStyle}>Calories Burned</div>
-          <div style={metricValueStyle}>{todayBurned.toLocaleString()} kcal</div>
-        </div>
-      </div>
-
-      <div
-        className="card"
-        style={{
-          ...metricCardBaseStyle,
-          backgroundImage: `${metricOverlay}, url('/dashboard-calories-eaten.png')`,
-          backgroundPosition: 'right center',
-        }}
-      >
-        <div style={metricIconWrapStyle}>
-          <Activity size={20} />
-        </div>
-        <div style={metricContentStyle}>
-          <div style={metricLabelStyle}>
-            Calories Eaten <span style={{ color: '#fde68a' }}>• {Math.round(todayProtein)}g PRO</span>
-          </div>
-          <div style={metricValueStyle}>{Math.round(todayCalories)} kcal</div>
-        </div>
-      </div>
-
-      <div
-        className="card"
-        style={{
-          ...metricCardBaseStyle,
-          backgroundImage: `${metricOverlay}, url('/dashboard-completion.png')`,
-          backgroundPosition: 'left center',
-        }}
-      >
-        <div style={metricIconWrapStyle}>
-          <CheckCircle2 size={20} />
-        </div>
-        <div style={metricContentStyle}>
-          <div style={metricLabelStyle}>Completion</div>
-          <div style={metricValueStyle}>{planProgressPct}%</div>
-        </div>
-      </div>
-
-      {/* Left Column */}
-      <div style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Workout Plan Card */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Dumbbell size={18} />
-              <h3 style={{ fontSize: '1.125rem' }}>Today Workout Plan</h3>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.5rem', background: 'var(--surface-hover)', borderRadius: '2px' }}>
-                {planDoneCount} / {workoutTasks.length} DONE
-              </span>
-              <button
-                onClick={() => setShowAiInput(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', padding: '0.3rem 0.75rem', background: 'var(--accent)', color: 'var(--bg)', borderRadius: 'var(--radius)', letterSpacing: '0.04em' }}
-              >
-                <Sparkles size={14} /> AI Plan
-              </button>
+    <div className="page">
+      {/* Hero: level + next action */}
+      <Card tone="violet">
+        <div className="row-wrap" style={{ justifyContent: 'space-between', gap: 20 }}>
+          <div className="stack-sm grow" style={{ minWidth: 'min(100%, 280px)' }}>
+            <span className="eyebrow gold">Lv {stats.level} · {stats.title}</span>
+            <h1 style={{ fontSize: 'clamp(1.7rem, 5vw, 2.4rem)', overflowWrap: 'anywhere' }}>
+              Welcome back, {user?.username || 'Athlete'}
+            </h1>
+            <p className="muted">
+              {remaining > 0
+                ? `${remaining} quest${remaining === 1 ? '' : 's'} left today. Keep the ${stats.streakDays}-day streak burning.`
+                : tasks.length
+                  ? 'All quests cleared today. Recovery is training too. 🎉'
+                  : 'Add a quest or let the AI coach build today’s plan.'}
+            </p>
+            <div style={{ maxWidth: 420, marginTop: 6 }}>
+              <div className="spread tiny mono muted" style={{ marginBottom: 6 }}>
+                <span>Level {stats.level}</span>
+                <span>{stats.xpIntoLevel} / {stats.xpForLevel} XP</span>
+              </div>
+              <ProgressBar value={stats.progressPct} label="Level progress" />
             </div>
           </div>
+          <div className="stack-sm" style={{ minWidth: 'min(100%, 220px)' }}>
+            <Link to="/counter" className="btn btn--primary btn--lg btn--block">
+              <Swords size={20} /> Start workout
+            </Link>
+            <Link to="/chat" className="btn btn--ghost btn--block">
+              <Sparkles size={18} /> Ask AI coach
+            </Link>
+          </div>
+        </div>
+      </Card>
 
-          {/* AI Plan Generator */}
-          {showAiInput && (
-            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-              <input
-                placeholder="e.g. upper body strength, 30 min HIIT, leg day..."
-                value={aiPlanPrompt}
-                onChange={e => setAiPlanPrompt(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleGenerateAIPlan()}
-                style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', padding: '0.6rem 0.75rem', color: 'var(--text-primary)', borderRadius: 'var(--radius)', fontSize: '0.875rem' }}
-                autoFocus
-              />
-              <button
-                onClick={handleGenerateAIPlan}
-                disabled={aiPlanLoading}
-                className="btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', whiteSpace: 'nowrap' }}
-              >
-                {aiPlanLoading ? <Loader2 size={14} className="spinner" /> : <Sparkles size={14} />}
-                {aiPlanLoading ? 'Generating...' : 'Generate'}
-              </button>
-            </div>
-          )}
+      <div className="grid-4">
+        <StatTile icon={Flame} tone="orange" label="Streak" value={`${stats.streakDays}d`} loading={statsLoading} />
+        <StatTile icon={Activity} tone="red" label="Burned today" value={`${todayBurned.toLocaleString()} kcal`} />
+        <StatTile icon={Utensils} tone="green" label="Eaten today" value={`${Math.round(todayCalories)} kcal`} hint={`${Math.round(todayProtein)}g protein`} loading={nutrition.isLoading} />
+        <StatTile icon={CheckCircle2} tone="violet" label="Quests" value={`${planPct}%`} hint={`${doneCount}/${tasks.length} done`} />
+      </div>
 
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-            <input
-              placeholder="Add a task (e.g., 20 min run)"
-              value={newTaskTitle}
-              onChange={e => setNewTaskTitle(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAddTask()}
-              style={{ flex: 1, background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '0.75rem', color: 'var(--text-primary)', borderRadius: 'var(--radius)' }}
+      <div className="split">
+        <div className="stack">
+          <Card>
+            <CardHeader
+              icon={Dumbbell}
+              title="Daily quests"
+              subtitle="Today’s workout plan"
+              action={
+                <div className="row">
+                  <Badge tone={planPct === 100 ? 'green' : 'gold'}>{doneCount}/{tasks.length} done</Badge>
+                  <Button variant="violet" size="sm" icon={Sparkles} onClick={() => setShowAiInput((v) => !v)}>AI plan</Button>
+                </div>
+              }
             />
-            <button onClick={handleAddTask} className="btn-primary" style={{ padding: '0.75rem 1.5rem' }}>Add</button>
-          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {workoutTasks.map(task => (
-              <div
-                key={task.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
-                  background: task.done ? 'transparent' : 'var(--surface-hover)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  opacity: task.done ? 0.5 : 1,
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <button
-                  onClick={() => handleToggleTask(task.id)}
-                  style={{ color: task.done ? 'var(--accent)' : 'var(--text-secondary)' }}
+            <AnimatePresence initial={false}>
+              {showAiInput && (
+                <motion.form
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  style={{ overflow: 'hidden' }}
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    aiPlan.mutate(aiPrompt)
+                  }}
                 >
-                  {task.done ? <CheckCircle2 size={20} /> : <div style={{ width: 20, height: 20, border: '2px solid var(--border)', borderRadius: '50%' }} />}
-                </button>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, textDecoration: task.done ? 'line-through' : 'none' }}>{task.title}</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem' }}>{task.details}</div>
+                  <div className="card card--violet" style={{ padding: 14, marginBottom: 14 }}>
+                    <div className="input-group input-group--stack">
+                      <Input
+                        placeholder="e.g. upper body strength, 30 min HIIT, leg day…"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        aria-label="Describe the workout you want"
+                        autoFocus
+                      />
+                      <Button type="submit" variant="violet" icon={Sparkles} loading={aiPlan.isPending}>Generate</Button>
+                    </div>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
+            <form className="input-group" onSubmit={addTask} style={{ marginBottom: 14 }}>
+              <Input placeholder="Add a quest (e.g. 20 min run)" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} aria-label="New quest" />
+              <Button type="submit" variant="primary" icon={Plus} aria-label="Add quest"><span className="hide-mobile">Add</span></Button>
+            </form>
+
+            <ul className="list">
+              <AnimatePresence initial={false}>
+                {tasks.map((task) => (
+                  <motion.li
+                    key={task.id}
+                    layout
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: 30 }}
+                    className="list-row"
+                    style={{ opacity: task.done ? 0.6 : 1, borderColor: task.done ? 'rgba(61,220,132,0.35)' : undefined }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleTask(task)}
+                      aria-label={task.done ? `Mark ${task.title} as not done` : `Complete ${task.title}`}
+                      aria-pressed={task.done}
+                      style={{
+                        width: 30, height: 30, flexShrink: 0, borderRadius: 9,
+                        display: 'grid', placeItems: 'center',
+                        border: `2px solid ${task.done ? 'var(--green)' : 'var(--border-strong)'}`,
+                        background: task.done ? 'var(--green)' : 'transparent',
+                        color: '#04220f',
+                        transition: 'all 0.2s var(--ease)',
+                      }}
+                    >
+                      {task.done && <Check size={18} strokeWidth={3} />}
+                    </button>
+                    <div className="grow">
+                      <div style={{ fontWeight: 700, textDecoration: task.done ? 'line-through' : 'none' }} className="truncate">{task.title}</div>
+                      <div className="tiny muted truncate">{task.details}</div>
+                    </div>
+                    <button type="button" className="icon-btn icon-btn--danger" onClick={() => deleteTask(task.id)} aria-label={`Delete ${task.title}`}>
+                      <Trash2 size={17} />
+                    </button>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+            {tasks.length === 0 && <p className="muted small center" style={{ padding: 16 }}>No quests yet. Add one above or generate an AI plan.</p>}
+
+            <div style={{ marginTop: 18 }}>
+              <div className="spread tiny" style={{ marginBottom: 6 }}>
+                <span className="eyebrow">Plan progress</span>
+                <span className="mono">{planPct}%</span>
+              </div>
+              <ProgressBar value={planPct} tone="green" label="Plan progress" />
+            </div>
+          </Card>
+
+          <Card tone="gold">
+            <CardHeader icon={TrendingUp} title="AI coach insight" />
+            <p style={{ marginBottom: 16 }}>
+              Your average form score is <strong className="gold">{Math.round(summary.data?.avg_form_score || 0)}%</strong> with a{' '}
+              <strong className="gold">{stats.streakDays}-day</strong> streak. Today, focus on{' '}
+              {planPct < 100 ? 'finishing your pending quests' : 'recovery and mobility'}.
+            </p>
+            <Link to="/chat" className="link">Open coach chat <ArrowRight size={16} /></Link>
+          </Card>
+        </div>
+
+        <div className="stack">
+          <BmiCard weight={profile.data?.weight} />
+
+          <Card>
+            <CardHeader icon={Flame} tone="orange" title="Streak calendar" subtitle="Workout days this week" />
+            <div className="spread" style={{ gap: 6 }}>
+              {week.map((day) => (
+                <div key={day.key} className="stack-sm" style={{ alignItems: 'center', gap: 6, flex: 1 }}>
+                  <div
+                    title={day.key}
+                    style={{
+                      width: '100%', maxWidth: 38, aspectRatio: '1', borderRadius: 10,
+                      display: 'grid', placeItems: 'center',
+                      background: day.count ? 'var(--gold)' : 'var(--bg-raised)',
+                      border: `1px solid ${day.count ? 'var(--gold)' : day.isToday ? 'var(--border-strong)' : 'var(--border)'}`,
+                      color: 'var(--gold-ink)',
+                      boxShadow: day.count ? '0 3px 0 var(--gold-deep)' : 'none',
+                    }}
+                  >
+                    {day.count > 0 && <Flame size={16} />}
+                  </div>
+                  <span className={`tiny ${day.isToday ? 'gold' : 'dim'}`} style={{ fontWeight: 700 }}>{day.label}</span>
                 </div>
-                <button onClick={() => handleDeleteTask(task.id)} className="text-muted" style={{ opacity: 0.5 }}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 700 }}>
-              <span>PLAN PROGRESS</span>
-              <span>{planProgressPct}%</span>
+              ))}
             </div>
-            <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px' }}>
-              <div style={{ width: `${planProgressPct}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px', transition: 'width 0.3s ease' }} />
-            </div>
-          </div>
-        </div>
+            <p className="small muted" style={{ marginTop: 14 }}>
+              {remaining === 0 && tasks.length > 0
+                ? 'All quests done today! Great streak maintenance.'
+                : `Complete ${remaining} more exercise${remaining === 1 ? '' : 's'} to keep your streak.`}
+            </p>
+          </Card>
 
-        {/* AI Suggestions Card */}
-        <div className="card" style={{ background: 'var(--accent)', color: 'var(--bg)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <TrendingUp size={18} />
-            <h3 style={{ fontSize: '1.125rem' }}>AI Coach Insight</h3>
-          </div>
-          <p style={{ fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.6, marginBottom: '1.5rem', opacity: 0.9 }}>
-            Based on your recent form score of {workoutSummary.avg_form_score}% and {consistency.streak_days}-day streak, I recommend focusing on {planProgressPct < 100 ? 'completing your pending tasks' : 'recovery and mobility'} today.
-          </p>
-          <Link to="/chat" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 800 }}>
-            OPEN COACH CHAT <ArrowRight size={16} />
-          </Link>
-        </div>
-      </div>
-
-      {/* Right Column */}
-      <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-        {/* BMI Card */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <Scale size={18} className="text-muted" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Your BMI</h3>
-          </div>
-          {bmi ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div style={{ fontSize: '2.5rem', fontWeight: 900, color: bmiCategory?.color }}>{bmi}</div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: bmiCategory?.color }}>{bmiCategory?.label}</div>
-              </div>
-              {/* BMI Scale Bar */}
-              <div style={{ position: 'relative', height: '8px', background: 'linear-gradient(to right, #60a5fa 0%, #4ade80 18.5%, #4ade80 25%, #fb923c 25%, #fb923c 30%, #f87171 30%)', borderRadius: '4px', marginBottom: '0.75rem' }}>
-                <div style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  left: `${Math.min(Math.max(((bmi - 10) / 30) * 100, 2), 98)}%`,
-                  width: '16px',
-                  height: '16px',
-                  background: bmiCategory?.color,
-                  borderRadius: '50%',
-                  border: '2px solid var(--bg)',
-                  transform: 'translateX(-50%)',
-                  transition: 'left 0.5s ease'
-                }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', opacity: 0.5, fontWeight: 700 }}>
-                <span>10</span><span>18.5</span><span>25</span><span>30</span><span>40+</span>
-              </div>
-              <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.75rem' }}>
-                Based on weight {profileData.weight}kg · height 170cm
-              </div>
-            </>
-          ) : (
-            <div className="text-muted" style={{ fontSize: '0.875rem' }}>
-              Complete your profile with age & weight to see BMI.
-              <Link to="/quiz" style={{ display: 'block', marginTop: '0.5rem', color: 'var(--accent)', fontWeight: 700, fontSize: '0.75rem' }}>→ Update Profile</Link>
-            </div>
-          )}
-        </div>
-
-        {/* Consistency Block — 7-day heatmap */}
-        <div className="card">
-          <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Today Focus</div>
-          <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Consistency Block</h3>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '1rem' }}>
-            {last7Days.map((day) => (
-              <div key={day.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
-                <div style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  background: day.hasWorkout ? 'var(--accent)' : 'var(--surface-hover)',
-                  border: `1px solid ${day.hasWorkout ? 'var(--accent)' : 'var(--border)'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }} title={day.key}>
-                  {day.hasWorkout && <CheckCircle2 size={14} style={{ color: 'var(--bg)' }} />}
-                </div>
-                <span style={{ fontSize: '0.55rem', fontWeight: 700, opacity: 0.5 }}>{day.dayName}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-muted" style={{ fontSize: '0.8rem', lineHeight: 1.5 }}>
-            {planDoneCount === workoutTasks.length && workoutTasks.length > 0
-              ? "All tasks done today! 🎉 Great streak maintenance."
-              : `Complete ${workoutTasks.length - planDoneCount} more exercise${workoutTasks.length - planDoneCount !== 1 ? 's' : ''} to maintain your streak.`}
-          </p>
-        </div>
-
-        {/* Daily Exercise Capacity */}
-        <div className="card">
-          <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }} className="text-muted">
-            Daily Exercise Capacity
-          </h3>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '120px', padding: '0 0.5rem', gap: '4px' }}>
-            {dailyCapacity.map((day, i) => {
-              const heightPct = maxDailyCount > 0 ? Math.max(10, (day.count / maxDailyCount) * 100) : 10
-              const isToday = day.key === todayKey
-              return (
+          <Card>
+            <CardHeader icon={Activity} tone="violet" title="Sessions this week" />
+            <div className="row" style={{ alignItems: 'flex-end', height: 110, gap: 6 }}>
+              {week.map((day) => (
                 <div
-                  key={i}
+                  key={day.key}
+                  title={`${day.count} session${day.count === 1 ? '' : 's'}`}
                   style={{
                     flex: 1,
-                    height: `${heightPct}%`,
-                    background: isToday ? 'var(--accent)' : (day.count > 0 ? 'rgba(255,255,255,0.3)' : 'var(--border)'),
-                    borderRadius: '2px',
-                    transition: 'height 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-                    position: 'relative',
+                    height: `${Math.max(8, (day.count / maxDaily) * 100)}%`,
+                    borderRadius: 6,
+                    background: day.isToday ? 'var(--gold)' : day.count ? 'var(--violet)' : 'var(--surface-3)',
+                    transition: 'height 0.6s var(--ease)',
                   }}
-                  title={`${day.count} exercise${day.count !== 1 ? 's' : ''}`}
                 />
+              ))}
+            </div>
+            <div className="spread tiny dim" style={{ marginTop: 8 }}>
+              {week.map((day) => <span key={day.key} style={{ flex: 1, textAlign: 'center' }}>{day.label[0]}</span>)}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader icon={Dumbbell} tone="green" title="Recent activity" />
+            {sessions.isLoading ? (
+              <div className="stack-sm"><Skeleton height={44} /><Skeleton height={44} /></div>
+            ) : recent.length ? (
+              <ul className="list">
+                {recent.map((session) => (
+                  <li key={session.id ?? session.created_at} className="list-row">
+                    <span className="icon-tile icon-tile--green" style={{ width: 34, height: 34 }}><Dumbbell size={16} /></span>
+                    <div className="grow">
+                      <div style={{ fontWeight: 700 }} className="truncate">{session.exercise_name}</div>
+                      <div className="tiny muted">{session.reps} reps · {session.calories_burned} kcal</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="small muted">No sessions yet. Finish a Workout Coach set to see it here.</p>
+            )}
+          </Card>
+
+          <div className="grid-4" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+            {[
+              { to: '/vision', icon: Camera, label: 'Vision Lab' },
+              { to: '/analytics', icon: TrendingUp, label: 'Stats' },
+              { to: '/settings', icon: SettingsIcon, label: 'Profile' },
+              { to: '/integrations', icon: Smartphone, label: 'Sync' },
+            ].map((action) => {
+              const Icon = action.icon
+              return (
+                <Link key={action.to} to={action.to} className="card card--interactive stack-sm" style={{ alignItems: 'center', padding: 16 }}>
+                  <Icon size={20} className="gold" />
+                  <span className="eyebrow" style={{ color: 'var(--text)' }}>{action.label}</span>
+                </Link>
               )
             })}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', padding: '0 0.5rem' }}>
-            {dailyCapacity.map((day, i) => (
-              <span key={i} style={{ fontSize: '0.6rem', fontWeight: 700, opacity: 0.5 }}>{day.dayName[0]}</span>
-            ))}
-          </div>
-          <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.75rem', textAlign: 'center' }}>
-            Sessions per day this week
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="card">
-          <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }} className="text-muted">
-            Recent Activity
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {recentActivity.length > 0 ? recentActivity.map((session, i) => (
-              <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <div style={{ width: '4px', height: '24px', background: 'var(--accent)', borderRadius: '2px' }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{session.exercise_name}</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem' }}>{session.reps} reps • {session.calories_burned} kcal</div>
-                </div>
-              </div>
-            )) : <p className="text-muted" style={{ fontSize: '0.875rem' }}>No recent activity. Complete a Workout Coach session!</p>}
-          </div>
-        </div>
-
-        {/* Quick Actions Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <Link to="/vision" className="card" style={{ padding: '1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <Camera size={20} className="text-muted" />
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>AI Tracking</span>
-          </Link>
-          <Link to="/analytics" className="card" style={{ padding: '1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <TrendingUp size={20} className="text-muted" />
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Insights</span>
-          </Link>
-          <Link to="/settings" className="card" style={{ padding: '1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <SettingsIcon size={20} className="text-muted" />
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Profile</span>
-          </Link>
-          <Link to="/integrations" className="card" style={{ padding: '1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <Bell size={20} className="text-muted" />
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Sync</span>
-          </Link>
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }

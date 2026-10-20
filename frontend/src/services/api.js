@@ -291,6 +291,13 @@ export function fetchProfile() {
   return request('/profile/')
 }
 
+export function changePassword({ currentPassword, newPassword }) {
+  return request('/auth/change-password/', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  })
+}
+
 export function updateProfile(profileData) {
   return request('/profile/', {
     method: 'PUT',

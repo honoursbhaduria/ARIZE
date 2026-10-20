@@ -1,469 +1,247 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Link } from 'react-router-dom'
-import {
-   Camera,
-   Activity,
-   Timer,
-   ArrowRight,
-   Upload,
-   ShieldCheck,
-   CheckCircle2,
-   AlertCircle,
-   PlayCircle,
-   FileVideo,
-   X,
-   RefreshCw
-} from 'lucide-react'
-import { getExerciseData, GYM_TOPICS } from '../services/wikipediaApi'
-import { analyzeWorkoutVideo, fetchWorkoutSummary } from '../services/api'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Activity, ArrowRight, BookOpen, CheckCircle2, CircleDashed, FileVideo, Gauge, PlayCircle, Ruler, Timer, Upload, X } from 'lucide-react'
+import { analyzeWorkoutVideo } from '../services/api'
+import { exerciseLibraryQuery, workoutSummaryQuery } from '../lib/queries'
+import { Alert, Badge, Button, Card, CardHeader, Field, Input, PageHeader, ProgressBar, Skeleton, Stat } from '../ui/components'
+
+const DEFAULT_EXERCISE_IMAGE = 'https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=400&q=60'
+
+const FALLBACK_EXERCISES = [
+  { name: 'Squat', extract: 'Keep back straight, chest up, and knees tracking over toes. Lower until thighs are parallel to the floor.' },
+  { name: 'Push-up', extract: 'Maintain a rigid plank line. Elbows at 45° to body. Full range: chest to floor, arms fully extended at top.' },
+  { name: 'Bicep Curl', extract: 'Elbow stays stationary at your side. Curl through full range then lower slowly with control.' },
+]
+
+const PLACEMENT_TIPS = [
+  'Whole body in frame, head to toe.',
+  'Side-on view works best for squats and push-ups.',
+  'Stand 6–8 feet from the camera.',
+  'Good lighting prevents tracking errors.',
+]
+
+const STATUS_LABEL = { idle: 'Not tested', checking: 'Testing…', ready: 'Ready', blocked: 'Blocked', unsupported: 'Unsupported' }
 
 export default function ComputerVision() {
-   const [exerciseCards, setExerciseCards] = useState([])
-   const [exerciseLoading, setExerciseLoading] = useState(true)
-   const [videoFile, setVideoFile] = useState(null)
-   const [videoUrl, setVideoUrl] = useState('')
-   const [videoDuration, setVideoDuration] = useState(0)
-   const [exerciseName, setExerciseName] = useState('Workout Session')
-   const [videoAnalysis, setVideoAnalysis] = useState(null)
-   const [videoLoading, setVideoLoading] = useState(false)
-   const [videoError, setVideoError] = useState('')
-   const [cameraStatus, setCameraStatus] = useState('idle')
-   const [latencyMs, setLatencyMs] = useState(null)
-   const [setupGuideOpen, setSetupGuideOpen] = useState(false)
-   const [workoutSummary, setWorkoutSummary] = useState(null)
-   const [isDragging, setIsDragging] = useState(false)
-   const fileInputRef = useRef(null)
+  const queryClient = useQueryClient()
+  const summary = useQuery(workoutSummaryQuery)
+  const library = useQuery(exerciseLibraryQuery)
+  const fileInputRef = useRef(null)
 
-   const fallbackExercises = useMemo(() => (
-      (GYM_TOPICS?.exercises || []).slice(0, 5).map((item) => item.name)
-   ), [])
-   const defaultExerciseImage = 'https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=1200&q=80'
+  const [videoFile, setVideoFile] = useState(null)
+  const [videoUrl, setVideoUrl] = useState('')
+  const [videoDuration, setVideoDuration] = useState(0)
+  const [exerciseName, setExerciseName] = useState('Workout Session')
+  const [fileError, setFileError] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
+  const [cameraStatus, setCameraStatus] = useState('idle')
+  const [latencyMs, setLatencyMs] = useState(null)
 
-   const supportedExerciseCount = useMemo(() => {
-      if (exerciseCards.length) return exerciseCards.length
-      return fallbackExercises.length || 0
-   }, [exerciseCards, fallbackExercises])
+  const analysis = useMutation({
+    mutationFn: () => analyzeWorkoutVideo(videoFile, { exercise_name: exerciseName, duration_seconds: videoDuration }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workouts'] }),
+  })
+  const videoAnalysis = analysis.data?.analysis || null
 
-   const formSignal = useMemo(() => {
-      if (videoAnalysis?.form_score != null) return Math.round(videoAnalysis.form_score)
-      if (workoutSummary?.avg_form_score != null) return Math.round(workoutSummary.avg_form_score)
-      return null
-   }, [videoAnalysis, workoutSummary])
+  useEffect(() => () => videoUrl && URL.revokeObjectURL(videoUrl), [videoUrl])
 
-   useEffect(() => {
-      let mounted = true
-      async function loadExerciseImages() {
-         setExerciseLoading(true)
-         const data = await getExerciseData()
-         if (!mounted) return
-         if (Array.isArray(data) && data.length) {
-            setExerciseCards(data.slice(0, 5))
-         } else {
-            setExerciseCards([])
-         }
-         setExerciseLoading(false)
-      }
-      loadExerciseImages()
-      return () => { mounted = false }
-   }, [])
+  const formSignal = videoAnalysis?.form_score != null
+    ? Math.round(videoAnalysis.form_score)
+    : summary.data?.avg_form_score != null
+      ? Math.round(summary.data.avg_form_score)
+      : null
 
-   useEffect(() => {
-      let mounted = true
-      async function loadWorkoutSummary() {
-         try {
-            const summary = await fetchWorkoutSummary()
-            if (mounted) setWorkoutSummary(summary)
-         } catch {
-            if (mounted) setWorkoutSummary({ total_sessions: 0, avg_form_score: 0, guest_mode: true })
-         }
-      }
-      loadWorkoutSummary()
-      return () => { mounted = false }
-   }, [])
+  const processFile = (file) => {
+    if (!file) return
+    if (!file.type.startsWith('video/')) {
+      setFileError('Please upload a valid video file.')
+      return
+    }
+    setVideoFile(file)
+    setVideoUrl(URL.createObjectURL(file))
+    setVideoDuration(0)
+    setFileError('')
+    analysis.reset()
+  }
 
-   useEffect(() => {
-      return () => { if (videoUrl) URL.revokeObjectURL(videoUrl) }
-   }, [videoUrl])
+  const clearVideo = () => {
+    setVideoFile(null)
+    setVideoUrl('')
+    setFileError('')
+    analysis.reset()
+  }
 
-   const processFile = (file) => {
-      if (!file) return
-      if (!file.type.startsWith('video/')) {
-         setVideoError('Please upload a valid video file.')
-         return
-      }
-      if (videoUrl) URL.revokeObjectURL(videoUrl)
-      const localUrl = URL.createObjectURL(file)
-      setVideoFile(file)
-      setVideoUrl(localUrl)
-      setVideoDuration(0)
-      setVideoAnalysis(null)
-      setVideoError('')
-   }
+  const handleCameraTest = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraStatus('unsupported')
+      return
+    }
+    setCameraStatus('checking')
+    const start = performance.now()
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      setLatencyMs(Math.round(performance.now() - start))
+      setCameraStatus('ready')
+      stream.getTracks().forEach((track) => track.stop())
+    } catch {
+      setCameraStatus('blocked')
+      setLatencyMs(null)
+    }
+  }
 
-   const handleVideoSelect = (event) => {
-      const file = event.target.files?.[0]
-      processFile(file)
-   }
+  const exercises = library.data?.length ? library.data : FALLBACK_EXERCISES
 
-   const handleDragOver = (e) => {
-      e.preventDefault()
-      setIsDragging(true)
-   }
+  return (
+    <div className="page">
+      <PageHeader eyebrow="Computer vision" title="Vision Lab" subtitle="Real-time pose tracking, camera diagnostics and deep analysis of your recorded sets." />
 
-   const handleDragLeave = (e) => {
-      e.preventDefault()
-      setIsDragging(false)
-   }
+      <Card tone="violet">
+        <div className="split split--even" style={{ alignItems: 'center' }}>
+          <div className="stack-sm">
+            <h2 style={{ fontSize: '1.5rem' }}>Ready for live tracking?</h2>
+            <p className="muted">Check your camera, then jump into Workout Coach for real-time rep counting and form feedback.</p>
+            <div className="row-wrap" style={{ marginTop: 8 }}>
+              <Link to="/counter" className="btn btn--primary"><PlayCircle size={18} /> Launch coach</Link>
+              <Button variant="ghost" icon={Gauge} loading={cameraStatus === 'checking'} onClick={handleCameraTest}>Run diagnostics</Button>
+            </div>
+          </div>
+          <div className="list">
+            <div className="list-row spread">
+              <span className="muted">Camera</span>
+              <Badge tone={cameraStatus === 'ready' ? 'green' : cameraStatus === 'blocked' || cameraStatus === 'unsupported' ? 'red' : undefined}>
+                {cameraStatus === 'ready' ? <CheckCircle2 size={12} /> : <CircleDashed size={12} />} {STATUS_LABEL[cameraStatus]}
+              </Badge>
+            </div>
+            <div className="list-row spread"><span className="muted">Pose model</span><span className="mono">{cameraStatus === 'ready' ? 'Active' : 'Standby'}</span></div>
+            <div className="list-row spread"><span className="muted">Latency</span><span className="mono">{latencyMs ? `${latencyMs} ms` : '--'}</span></div>
+          </div>
+        </div>
+        {(cameraStatus === 'blocked' || cameraStatus === 'unsupported') && (
+          <div style={{ marginTop: 14 }}>
+            <Alert tone="error">{cameraStatus === 'blocked' ? 'Camera permission blocked. Allow camera access in your browser settings.' : 'Camera API is not supported in this browser.'}</Alert>
+          </div>
+        )}
+      </Card>
 
-   const handleDrop = (e) => {
-      e.preventDefault()
-      setIsDragging(false)
-      const file = e.dataTransfer.files?.[0]
-      processFile(file)
-   }
+      <div className="split">
+        <div className="stack">
+          <Card>
+            <CardHeader icon={Upload} title="Deep video analysis" subtitle="Upload a clip of your set for a form score, rep estimate and burn." />
+            <div className="stack">
+              <Field label="Exercise" htmlFor="exercise-name">
+                <Input id="exercise-name" value={exerciseName} onChange={(e) => setExerciseName(e.target.value)} placeholder="e.g. Squats" />
+              </Field>
 
-   const clearVideo = () => {
-      if (videoUrl) URL.revokeObjectURL(videoUrl)
-      setVideoFile(null)
-      setVideoUrl('')
-      setVideoAnalysis(null)
-      setVideoError('')
-   }
-
-   const runVideoAnalysis = async () => {
-      if (!videoFile) {
-         setVideoError('Upload a workout video first.')
-         return
-      }
-      setVideoLoading(true)
-      setVideoError('')
-      setVideoAnalysis(null)
-      try {
-         const result = await analyzeWorkoutVideo(videoFile, {
-            exercise_name: exerciseName,
-            duration_seconds: videoDuration,
-         })
-         setVideoAnalysis(result?.analysis || null)
-         const summary = await fetchWorkoutSummary().catch(() => null)
-         if (summary) setWorkoutSummary(summary)
-      } catch (error) {
-         setVideoError(error.message || 'Video analysis failed. Please try again.')
-      } finally {
-         setVideoLoading(false)
-      }
-   }
-
-   const handleCameraTest = async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-         setCameraStatus('unsupported')
-         setVideoError('Camera API is not supported in this browser.')
-         return
-      }
-      setCameraStatus('checking')
-      setVideoError('')
-      const start = performance.now()
-      try {
-         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-         const latency = Math.round(performance.now() - start)
-         setLatencyMs(latency)
-         setCameraStatus('ready')
-         stream.getTracks().forEach((track) => track.stop())
-      } catch {
-         setCameraStatus('blocked')
-         setLatencyMs(null)
-         setVideoError('Camera permission blocked.')
-      }
-   }
-
-   return (
-      <motion.div
-         className="grid-dashboard"
-         initial={{ opacity: 0 }}
-         animate={{ opacity: 1 }}
-      >
-         <div style={{ gridColumn: 'span 12', marginBottom: '1rem' }}>
-            <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>AI Body Tracking</h1>
-            <p className="text-muted">Real-time pose analysis, movement coaching, and deep video insights.</p>
-         </div>
-
-         {/* Hero / System Status */}
-         <div
-            className="card"
-            style={{
-               gridColumn: 'span 12',
-               color: '#ffffff',
-               display: 'flex',
-               flexWrap: 'wrap',
-               gap: '1.5rem',
-               justifyContent: 'space-between',
-               alignItems: 'center',
-               backgroundImage: `linear-gradient(110deg, rgba(8, 8, 8, 0.88), rgba(8, 8, 8, 0.72)), url('/dashboard-gym-sequence.png')`,
-               backgroundSize: 'cover',
-               backgroundPosition: 'center',
-               borderColor: 'rgba(255, 255, 255, 0.14)'
-            }}
-         >
-            <div>
-               <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Ready for Live Tracking?</h2>
-               <p style={{ fontSize: '0.875rem', opacity: 0.8, maxWidth: '600px', marginBottom: '1.5rem' }}>
-                  Verify your environment and camera setup to enable 60 FPS real-time rep counting and form feedback.
-               </p>
-               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                  <Link to="/counter" className="btn-primary" style={{ background: '#ffffff', color: '#0a0a0a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                     <PlayCircle size={18} /> Launch Counter
-                  </Link>
-                  <button onClick={handleCameraTest} className="btn-secondary" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.24)', color: '#ffffff' }}>
-                     {cameraStatus === 'checking' ? 'Testing...' : 'Run Diagnostics'}
+              <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(e) => processFile(e.target.files?.[0])} />
+              {videoUrl ? (
+                <div style={{ position: 'relative', borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                  <video
+                    src={videoUrl}
+                    controls
+                    playsInline
+                    onLoadedMetadata={(e) => setVideoDuration(Math.round(e.currentTarget.duration || 0))}
+                    style={{ width: '100%', maxHeight: 320, background: '#000' }}
+                  />
+                  <button type="button" className="icon-btn" onClick={clearVideo} aria-label="Remove video" style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                    <X size={18} />
                   </button>
-               </div>
-            </div>
-            <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.42)', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.18)', minWidth: 'min(240px, 100%)', flex: '1 1 240px', backdropFilter: 'blur(2px)' }}>
-               <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#ffffff', opacity: 0.75, marginBottom: '1rem' }}>System Status</div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600 }}>
-                     <span>Camera</span>
-                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        {cameraStatus === 'ready' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                        {cameraStatus === 'ready' ? 'Ready' : 'Not Setup'}
-                     </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600 }}>
-                     <span>Pose Model</span>
-                     <span>{cameraStatus === 'ready' ? 'Active' : 'Standby'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600 }}>
-                     <span>Latency</span>
-                     <span>{latencyMs ? `${latencyMs}ms` : '--'}</span>
-                  </div>
-               </div>
-            </div>
-         </div>
-
-         {/* Main Feature Cards */}
-         <div style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {/* Live Rep Counting Overview */}
-            <div className="card">
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                     <Activity size={18} />
-                     <h3 style={{ fontSize: '1.125rem' }}>Live Session Engine</h3>
-                  </div>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', padding: '0.25rem 0.5rem', background: 'var(--surface-hover)', borderRadius: '2px' }}>
-                     MediaPipe Pose
-                  </span>
-               </div>
-               <p style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                  Our core vision engine tracks 33 body landmarks to calculate joint angles and movement velocity.
-               </p>
-               <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-                  <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)' }}>
-                     <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>Skeleton Overlay</div>
-                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Real-time 2D joint mapping</div>
-                  </div>
-                  <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)' }}>
-                     <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>Phase Detection</div>
-                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Eccentric/Concentric tracking</div>
-                  </div>
-               </div>
-               {/* Camera placement guide always visible */}
-               <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: '0.875rem', background: 'var(--surface-hover)' }}>
-                  <div style={{ fontWeight: 700, marginBottom: '0.75rem', fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.7 }}>📐 Placement Guide</div>
-                  <ul style={{ paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', lineHeight: 1.6 }}>
-                     <li>Ensure full body visibility — head to toe in frame.</li>
-                     <li>Lateral (side) view works best for Squats and Push-ups.</li>
-                     <li>Maintain 6–8 feet distance from the camera.</li>
-                     <li>Good lighting prevents landmark detection errors.</li>
-                  </ul>
-               </div>
-            </div>
-
-            {/* Video Analysis Upload with Drop Section */}
-            <div className="card">
-               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                  <Upload size={18} />
-                  <h3 style={{ fontSize: '1.125rem' }}>Deep Video Analysis</h3>
-               </div>
-
-               <div style={{ marginBottom: '1.5rem' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '0.5rem' }}>Exercise Type</label>
-                  <input
-                     value={exerciseName}
-                     onChange={e => setExerciseName(e.target.value)}
-                     placeholder="e.g. Squats"
-                     style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '0.75rem', color: 'var(--text-primary)', borderRadius: 'var(--radius)' }}
-                  />
-               </div>
-
-               <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={`dropzone ${isDragging ? 'dropzone--active' : ''}`}
                   onClick={() => fileInputRef.current?.click()}
-                  style={{
-                     border: `2px dashed ${isDragging ? 'var(--accent)' : 'var(--border)'}`,
-                     borderRadius: 'var(--radius)',
-                     padding: '3rem 2rem',
-                     textAlign: 'center',
-                     background: isDragging ? 'rgba(255,255,255,0.05)' : 'var(--surface-hover)',
-                     cursor: 'pointer',
-                     transition: 'all 0.2s ease',
-                     position: 'relative',
-                     marginBottom: '1.5rem'
-                  }}
-               >
-                  <input
-                     type="file"
-                     ref={fileInputRef}
-                     accept="video/*"
-                     onChange={handleVideoSelect}
-                     style={{ display: 'none' }}
-                  />
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                  onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
+                  onDrop={(e) => { e.preventDefault(); setIsDragging(false); processFile(e.dataTransfer.files?.[0]) }}
+                >
+                  <FileVideo size={40} strokeWidth={1.5} />
+                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>Drop a workout clip here</span>
+                  <span className="small">or tap to choose from your device</span>
+                </button>
+              )}
+              {videoUrl && (
+                <button type="button" className="link small" onClick={() => fileInputRef.current?.click()} style={{ alignSelf: 'flex-start' }}>
+                  Change video
+                </button>
+              )}
 
-                  <AnimatePresence mode="wait">
-                     {!videoUrl ? (
-                        <motion.div
-                           key="empty"
-                           initial={{ opacity: 0 }}
-                           animate={{ opacity: 1 }}
-                           exit={{ opacity: 0 }}
-                           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}
-                        >
-                           <FileVideo size={48} strokeWidth={1} className="text-muted" />
-                           <div>
-                              <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.25rem' }}>Drop workout clip here</div>
-                              <div className="text-muted" style={{ fontSize: '0.875rem' }}>or click to browse from device</div>
-                           </div>
-                        </motion.div>
-                     ) : (
-                        <motion.div
-                           key="preview"
-                           initial={{ opacity: 0 }}
-                           animate={{ opacity: 1 }}
-                           exit={{ opacity: 0 }}
-                           style={{ width: '100%' }}
-                        >
-                           <div style={{ position: 'relative', borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                              <video src={videoUrl} controls style={{ width: '100%', maxHeight: '300px', display: 'block' }} />
-                              <button
-                                 onClick={(e) => { e.stopPropagation(); clearVideo(); }}
-                                 style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'rgba(0,0,0,0.5)', padding: '0.5rem', borderRadius: '50%', color: '#fff' }}
-                              >
-                                 <X size={16} />
-                              </button>
-                           </div>
-                           <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--accent)', fontSize: '0.875rem', fontWeight: 600 }}>
-                              <RefreshCw size={14} /> Change Video
-                           </div>
-                        </motion.div>
-                     )}
-                  </AnimatePresence>
-               </div>
+              {fileError && <Alert tone="error">{fileError}</Alert>}
+              {analysis.isError && <Alert tone="error">{analysis.error?.message || 'Video analysis failed. Please try again.'}</Alert>}
 
-               {videoError && (
-                  <div style={{ marginBottom: '1.5rem', padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius)', color: '#ef4444', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                     <AlertCircle size={16} /> {videoError}
+              <Button variant="primary" size="lg" block loading={analysis.isPending} disabled={!videoFile} onClick={() => analysis.mutate()}>
+                {analysis.isPending ? 'Analysing…' : 'Analyse recording'}
+              </Button>
+
+              {videoAnalysis && (
+                <div className="grid-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+                  <div className="list-row" style={{ justifyContent: 'center' }}><Stat label="Form" value={`${videoAnalysis.form_score}%`} /></div>
+                  <div className="list-row" style={{ justifyContent: 'center' }}><Stat label="Reps" value={videoAnalysis.estimated_reps} /></div>
+                  <div className="list-row" style={{ justifyContent: 'center' }}><Stat label="Burn" value={`${videoAnalysis.calories_burned}`} hint="kcal" /></div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader icon={Activity} tone="green" title="Live session engine" action={<Badge>MediaPipe Pose</Badge>} />
+            <p className="muted" style={{ marginBottom: 14 }}>Tracks 33 body landmarks to calculate joint angles and movement phase in real time.</p>
+            <div className="grid-2" style={{ marginBottom: 14 }}>
+              <div className="list-row"><span className="stack-sm" style={{ gap: 2 }}><strong>Skeleton overlay</strong><span className="tiny muted">Real-time 2D joint mapping</span></span></div>
+              <div className="list-row"><span className="stack-sm" style={{ gap: 2 }}><strong>Phase detection</strong><span className="tiny muted">Eccentric / concentric tracking</span></span></div>
+            </div>
+            <div className="eyebrow row" style={{ marginBottom: 8 }}><Ruler size={14} /> Placement guide</div>
+            <ul className="stack-sm">
+              {PLACEMENT_TIPS.map((tip) => (
+                <li key={tip} className="row small"><CheckCircle2 size={16} className="green" style={{ flexShrink: 0 }} /> {tip}</li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+
+        <div className="stack">
+          <Card>
+            <CardHeader icon={Timer} tone="orange" title="Historical form" />
+            <div className="row" style={{ alignItems: 'baseline', marginBottom: 10 }}>
+              <span className="mono" style={{ fontSize: '2.2rem', fontWeight: 700 }}>{formSignal ?? '--'}%</span>
+              <span className="small muted">average accuracy</span>
+            </div>
+            <ProgressBar value={formSignal || 0} tone="gold" label="Average form" />
+          </Card>
+
+          <Card>
+            <CardHeader icon={BookOpen} tone="blue" title="Posture reading" subtitle="Guides for every tracked exercise" />
+            <div className="list">
+              {library.isLoading
+                ? [0, 1, 2].map((i) => <Skeleton key={i} height={88} />)
+                : exercises.map((ex) => (
+                  <div key={ex.name} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                    <div className="row">
+                      {library.data?.length ? (
+                        <img
+                          src={ex.thumbnail || DEFAULT_EXERCISE_IMAGE}
+                          alt=""
+                          loading="lazy"
+                          onError={(e) => { e.currentTarget.src = DEFAULT_EXERCISE_IMAGE }}
+                          style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+                        />
+                      ) : null}
+                      <strong className="truncate">{ex.name}</strong>
+                    </div>
+                    <p className="small muted">{ex.extract ? (ex.extract.length > 160 ? `${ex.extract.slice(0, 160)}…` : ex.extract) : 'Keep form controlled throughout the movement.'}</p>
+                    <Link to="/posture-reading" search={{ topic: ex.name }} className="link small">Read more <ArrowRight size={14} /></Link>
                   </div>
-               )}
-
-               <button onClick={runVideoAnalysis} disabled={videoLoading || !videoFile} className="btn-primary" style={{ width: '100%' }}>
-                  {videoLoading ? 'Processing Visual Data...' : 'Analyze Recording'}
-               </button>
-
-               {videoAnalysis && (
-                  <div style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                     <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
-                        <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Form</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{videoAnalysis.form_score}%</div>
-                     </div>
-                     <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
-                        <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Reps</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{videoAnalysis.estimated_reps}</div>
-                     </div>
-                     <div style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
-                        <div className="text-muted" style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase' }}>Burn</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{videoAnalysis.calories_burned}kcal</div>
-                     </div>
-                  </div>
-               )}
+                ))}
             </div>
-         </div>
+          </Card>
 
-         {/* Right Column: Knowledge & Stats */}
-         <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div className="card">
-               <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }} className="text-muted">
-                  Posture Reading
-               </h3>
-               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.5 }}>
-                  Educational posture guides for each tracked exercise.
-               </p>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {exerciseLoading ? (
-                     <div className="spinner" style={{ margin: '1rem auto' }} />
-                  ) : exerciseCards.length > 0 ? exerciseCards.map(ex => (
-                     <div key={ex.name} style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                           <img
-                              src={ex.thumbnail || defaultExerciseImage}
-                              style={{ width: '36px', height: '36px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }}
-                              onError={e => e.target.src = defaultExerciseImage}
-                           />
-                           <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{ex.name}</div>
-                        </div>
-                        {ex.extract ? (
-                           <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-                              {ex.extract.length > 200 ? ex.extract.slice(0, 200) + '...' : ex.extract}
-                           </p>
-                        ) : (
-                           <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                              Full body posture tracking enabled. Keep form controlled throughout the movement.
-                           </p>
-                        )}
-                        <Link
-                           to={`/posture-reading?topic=${encodeURIComponent(ex.name)}`}
-                           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.75rem', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--accent)' }}
-                        >
-                           Read More <ArrowRight size={13} />
-                        </Link>
-                     </div>
-                  )) : [
-                     { name: 'Squat', desc: 'Keep back straight, chest up, and knees tracking over toes. Lower until thighs are parallel to the floor.' },
-                     { name: 'Push-up', desc: 'Maintain a rigid plank line. Elbows at 45° to body. Full range: chest to floor, arms fully extended at top.' },
-                     { name: 'Bicep Curl', desc: 'Elbow stays stationary at your side. Curl through full range then lower slowly with control.' },
-                  ].map(ex => (
-                     <div key={ex.name} style={{ padding: '1rem', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: '0.5rem' }}>{ex.name}</div>
-                        <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{ex.desc}</p>
-                     </div>
-                  ))
-                  }
-               </div>
-            </div>
-
-            <div className="card" style={{ background: 'var(--surface-hover)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <Timer size={18} className="text-muted" />
-                  <h3 style={{ fontSize: '1.125rem' }}>Historical Form</h3>
-               </div>
-               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '2rem', fontWeight: 800 }}>{formSignal || '--'}%</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem' }}>Average Accuracy</div>
-               </div>
-               <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px' }}>
-                  <div style={{ width: `${formSignal || 0}%`, height: '100%', background: 'var(--accent)', borderRadius: '2px' }} />
-               </div>
-            </div>
-
-            <div className="card">
-               <h3 style={{ fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem' }} className="text-muted">
-                  CV Roadmap
-               </h3>
-               <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  Coming soon: Multi-person tracking, 3D skeletal reconstruction, and automated equipment detection.
-               </p>
-            </div>
-         </div>
-      </motion.div>
-   )
+          <Card>
+            <CardHeader title="Roadmap" />
+            <p className="small muted">Coming soon: multi-person tracking, 3D skeletal reconstruction and automatic equipment detection.</p>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
 }

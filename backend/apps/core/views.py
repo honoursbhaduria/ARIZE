@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from datetime import timedelta
 
 import httpx
@@ -246,6 +248,30 @@ class DemoLoginView(APIView):
                 'is_demo': True,
             }
         )
+
+
+class ChangePasswordView(APIView):
+    def post(self, request):
+        user = request.user
+        current_password = request.data.get('current_password') or ''
+        new_password = request.data.get('new_password') or ''
+
+        if user.username == 'demo_user':
+            return Response({'detail': 'The demo account cannot set a password.'}, status=status.HTTP_403_FORBIDDEN)
+        if not new_password:
+            return Response({'detail': 'New password is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Accounts created through Google/Supabase have no usable password yet.
+        if user.has_usable_password() and not user.check_password(current_password):
+            return Response({'detail': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(new_password, user)
+        except DjangoValidationError as exc:
+            return Response({'detail': ' '.join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+        return Response({'detail': 'Password updated.'})
 
 
 class ProfileView(APIView):

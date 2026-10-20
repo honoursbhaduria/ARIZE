@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { ShoppingCart, ExternalLink, Plus, Minus } from 'lucide-react'
-import '../styles/ShoppingProductCard.css'
+import { ExternalLink, Minus, Plus, ShoppingCart } from 'lucide-react'
+import { PRODUCT_PLACEHOLDER } from '../lib/placeholder'
+import { Badge, Button } from '../ui/components'
 
 export default function ShoppingProductCard({ product, onAddToCart }) {
   const [quantity, setQuantity] = useState(1)
   const [isAdding, setIsAdding] = useState(false)
 
-  const handleAddToCart = async () => {
+  const handleAdd = async () => {
     setIsAdding(true)
     try {
       await onAddToCart({
@@ -17,129 +18,52 @@ export default function ShoppingProductCard({ product, onAddToCart }) {
         amazon_url: product.shopping_links?.amazon || '',
         flipkart_url: product.shopping_links?.flipkart || '',
         quantity,
-        price_estimate: 0
+        price_estimate: 0,
       })
       setQuantity(1)
-    } catch (error) {
-      console.error('Failed to add to cart:', error)
     } finally {
       setIsAdding(false)
     }
   }
 
-  const placeholderImage = 'https://via.placeholder.com/200?text=No+Image'
-  const primaryShoppingUrl = product.shopping_links?.amazon || product.shopping_links?.flipkart || product.wiki_url
+  const links = [
+    { key: 'amazon', label: 'Amazon', href: product.shopping_links?.amazon },
+    { key: 'flipkart', label: 'Flipkart', href: product.shopping_links?.flipkart },
+    { key: 'wiki', label: 'Learn more', href: product.wiki_url },
+  ].filter((link) => link.href)
 
   return (
-    <div className="product-card">
-      {/* Product Image */}
-      <div className="product-image-container">
+    <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', aspectRatio: '4 / 3', background: 'var(--surface-2)' }}>
         <img
-          src={product.image_url || placeholderImage}
+          src={product.image_url || PRODUCT_PLACEHOLDER}
           alt={product.title}
-          className="product-image"
-          onError={(e) => {
-            e.target.src = placeholderImage
-          }}
+          loading="lazy"
+          onError={(e) => { e.currentTarget.src = PRODUCT_PLACEHOLDER }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
-        <span className="source-badge">Wikipedia</span>
+        <span style={{ position: 'absolute', top: 8, left: 8 }}><Badge>{product.category || 'Health product'}</Badge></span>
       </div>
-
-      {/* Product Info */}
-      <div className="product-info">
-        <h4 className="product-title">{product.title}</h4>
-        <p className="product-category">
-          {product.category || 'Health Product'}
-        </p>
-
-        {product.description && (
-          <p className="product-description">
-            {product.description.substring(0, 100)}...
-          </p>
+      <div className="stack-sm" style={{ padding: 14, flex: 1 }}>
+        <strong style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem' }}>{product.title}</strong>
+        {product.description && <p className="tiny muted">{product.description.slice(0, 100)}{product.description.length > 100 ? '…' : ''}</p>}
+        {links.length > 0 && (
+          <div className="row-wrap" style={{ gap: 6 }}>
+            {links.map((link) => (
+              <a key={link.key} href={link.href} target="_blank" rel="noopener noreferrer" className="chip" style={{ minHeight: 30, fontSize: '0.78rem' }}>
+                <ExternalLink size={12} /> {link.label}
+              </a>
+            ))}
+          </div>
         )}
-
-        {/* Shopping Links */}
-        <div className="shopping-links">
-          {product.shopping_links?.amazon && (
-            <a
-              href={product.shopping_links.amazon}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="link-button amazon"
-              title="Buy on Amazon"
-            >
-              <ExternalLink size={14} />
-              Amazon
-            </a>
-          )}
-          {product.shopping_links?.flipkart && (
-            <a
-              href={product.shopping_links.flipkart}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="link-button flipkart"
-              title="Buy on Flipkart"
-            >
-              <ExternalLink size={14} />
-              Flipkart
-            </a>
-          )}
-          {product.wiki_url && (
-            <a
-              href={product.wiki_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="link-button wiki"
-              title="Learn more on Wikipedia"
-            >
-              <ExternalLink size={14} />
-              Learn More
-            </a>
-          )}
+        <div className="row" style={{ marginTop: 'auto', paddingTop: 6 }}>
+          <div className="row" style={{ gap: 4 }}>
+            <button type="button" className="icon-btn" onClick={() => setQuantity((q) => Math.max(1, q - 1))} disabled={quantity <= 1} aria-label="Decrease quantity"><Minus size={16} /></button>
+            <span className="mono" style={{ minWidth: 22, textAlign: 'center' }} aria-label="Quantity">{quantity}</span>
+            <button type="button" className="icon-btn" onClick={() => setQuantity((q) => q + 1)} aria-label="Increase quantity"><Plus size={16} /></button>
+          </div>
+          <Button variant="primary" size="sm" icon={ShoppingCart} loading={isAdding} onClick={handleAdd} className="grow">Add</Button>
         </div>
-
-        {/* Quantity Selector */}
-        <div className="quantity-selector">
-          <button
-            className="qty-btn"
-            onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            disabled={quantity <= 1}
-          >
-            <Minus size={14} />
-          </button>
-          <input
-            type="number"
-            min="1"
-            value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-            className="qty-input"
-          />
-          <button className="qty-btn" onClick={() => setQuantity(quantity + 1)}>
-            <Plus size={14} />
-          </button>
-        </div>
-
-        {/* Add to Cart Button */}
-        <button
-          className="add-to-cart-btn"
-          onClick={handleAddToCart}
-          disabled={isAdding}
-        >
-          <ShoppingCart size={16} />
-          {isAdding ? 'Adding...' : 'Add to Cart'}
-        </button>
-
-        {primaryShoppingUrl && (
-          <a
-            href={primaryShoppingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shop-now-link"
-          >
-            <ExternalLink size={14} />
-            Buy Now
-          </a>
-        )}
       </div>
     </div>
   )

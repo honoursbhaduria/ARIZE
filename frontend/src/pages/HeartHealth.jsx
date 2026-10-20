@@ -1,22 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { HeartPulse, ShieldAlert, Activity } from 'lucide-react'
+import { Activity, HeartPulse, ShieldAlert, Stethoscope } from 'lucide-react'
 import { predictHeartHealth } from '../services/api'
+import { Alert, Badge, Button, Card, CardHeader, PageHeader } from '../ui/components'
 
 const FIELD_CONFIG = [
   { key: 'Gender', label: 'Gender', options: ['Male', 'Female'] },
-  { key: 'Age', label: 'Age Group', options: ['18-34', '35-50', '51-64', '65+'] },
-  { key: 'History', label: 'Hypertension History', options: ['No', 'Yes'] },
-  { key: 'Patient', label: 'Currently Diagnosed Patient', options: ['No', 'Yes'] },
-  { key: 'TakeMedication', label: 'Taking Medication', options: ['No', 'Yes'] },
-  { key: 'Severity', label: 'Current Severity', options: ['Mild', 'Moderate', 'Sever'] },
-  { key: 'BreathShortness', label: 'Shortness of Breath', options: ['No', 'Yes'] },
-  { key: 'VisualChanges', label: 'Visual Changes', options: ['No', 'Yes'] },
-  { key: 'NoseBleeding', label: 'Nose Bleeding', options: ['No', 'Yes'] },
-  { key: 'Whendiagnoused', label: 'When Diagnosed', options: ['<1 Year', '1 - 5 Years', '>5 Years'] },
-  { key: 'Systolic', label: 'Systolic Range', options: ['100 - 110', '111 - 120', '121 - 130', '130+'] },
-  { key: 'Diastolic', label: 'Diastolic Range', options: ['70 - 80', '81 - 90', '91 - 100', '100+'] },
-  { key: 'ControlledDiet', label: 'Following Controlled Diet', options: ['No', 'Yes'] },
+  { key: 'Age', label: 'Age group', options: ['18-34', '35-50', '51-64', '65+'] },
+  { key: 'History', label: 'Hypertension history', options: ['No', 'Yes'] },
+  { key: 'Patient', label: 'Currently diagnosed patient', options: ['No', 'Yes'] },
+  { key: 'TakeMedication', label: 'Taking medication', options: ['No', 'Yes'] },
+  // "Sever" is the value the prediction model was trained on.
+  { key: 'Severity', label: 'Current severity', options: ['Mild', 'Moderate', 'Sever'], labels: { Sever: 'Severe' } },
+  { key: 'BreathShortness', label: 'Shortness of breath', options: ['No', 'Yes'] },
+  { key: 'VisualChanges', label: 'Visual changes', options: ['No', 'Yes'] },
+  { key: 'NoseBleeding', label: 'Nose bleeding', options: ['No', 'Yes'] },
+  { key: 'Whendiagnoused', label: 'When diagnosed', options: ['<1 Year', '1 - 5 Years', '>5 Years'] },
+  { key: 'Systolic', label: 'Systolic range', options: ['100 - 110', '111 - 120', '121 - 130', '130+'] },
+  { key: 'Diastolic', label: 'Diastolic range', options: ['70 - 80', '81 - 90', '91 - 100', '100+'] },
+  { key: 'ControlledDiet', label: 'Following controlled diet', options: ['No', 'Yes'] },
+]
+
+const GROUPS = [
+  { title: 'Patient basics', icon: HeartPulse, tone: 'red', fields: FIELD_CONFIG.slice(0, 6) },
+  { title: 'Symptoms & signals', icon: ShieldAlert, tone: 'orange', fields: FIELD_CONFIG.slice(6, 10) },
+  { title: 'Blood pressure & diet', icon: Activity, tone: 'blue', fields: FIELD_CONFIG.slice(10, 13) },
 ]
 
 const INITIAL_FORM = {
@@ -35,135 +44,98 @@ const INITIAL_FORM = {
   ControlledDiet: 'Yes',
 }
 
-export default function HeartHealth() {
-  const [form, setForm] = useState(INITIAL_FORM)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState(null)
-
-  const groupedFields = useMemo(() => {
-    return {
-      basics: FIELD_CONFIG.slice(0, 6),
-      symptoms: FIELD_CONFIG.slice(6, 10),
-      pressure: FIELD_CONFIG.slice(10, 13),
-    }
-  }, [])
-
-  const handleChange = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const handlePredict = async (event) => {
-    event.preventDefault()
-    setLoading(true)
-    setError('')
-    setResult(null)
-    try {
-      const response = await predictHeartHealth(form)
-      setResult(response)
-    } catch (err) {
-      setError(err.message || 'Unable to run heart health prediction right now.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const renderFieldBlock = (title, icon, fields) => (
-    <div className="card" style={{ gridColumn: 'span 4' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-        {icon}
-        <h3 style={{ fontSize: '1rem' }}>{title}</h3>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {fields.map((field) => (
-          <div key={field.key}>
-            <label className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem', display: 'block' }}>
-              {field.label}
-            </label>
-            <select
-              value={form[field.key]}
-              onChange={(e) => handleChange(field.key, e.target.value)}
-              style={{ width: '100%', background: 'var(--surface-hover)', border: '1px solid var(--border)', padding: '0.65rem', color: 'var(--text-primary)', borderRadius: 'var(--radius)' }}
-            >
-              {field.options.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
+function OptionChips({ field, value, onChange }) {
+  return (
+    <div className="field">
+      <span className="label" id={`hh-${field.key}`}>{field.label}</span>
+      <div className="row-wrap" role="radiogroup" aria-labelledby={`hh-${field.key}`} style={{ gap: 8 }}>
+        {field.options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={value === option}
+            className={`chip ${value === option ? 'chip--active' : ''}`}
+            onClick={() => onChange(option)}
+          >
+            {field.labels?.[option] || option}
+          </button>
         ))}
       </div>
     </div>
   )
+}
+
+export default function HeartHealth() {
+  const [form, setForm] = useState(INITIAL_FORM)
+  const prediction = useMutation({ mutationFn: predictHeartHealth })
+  const result = prediction.data
+
+  const submit = (event) => {
+    event.preventDefault()
+    prediction.mutate(form, {
+      onSuccess: () => setTimeout(() => document.getElementById('hh-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50),
+    })
+  }
 
   return (
-    <motion.div
-      className="grid-dashboard"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      style={{
-        minHeight: '100%',
-        backgroundImage: "linear-gradient(145deg, rgba(5,5,5,0.88), rgba(5,5,5,0.72)), url('/image.png')",
-        backgroundSize: 'cover, cover',
-        backgroundPosition: 'center, center',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#050505',
-      }}
-    >
-      <div style={{ gridColumn: 'span 12', marginBottom: '1rem' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>AI Heart Health Measure</h1>
-        <p className="text-muted">Assess hypertension risk stage with medical-style guidance and action recommendations.</p>
-      </div>
+    <div className="page">
+      <PageHeader eyebrow="Health check" title="Heart Health" subtitle="Estimate your hypertension stage and get guided next steps. Educational only, not a diagnosis." />
 
-      <form onSubmit={handlePredict} style={{ display: 'contents' }}>
-        {renderFieldBlock('Patient Basics', <HeartPulse size={18} />, groupedFields.basics)}
-        {renderFieldBlock('Symptoms & Signals', <ShieldAlert size={18} />, groupedFields.symptoms)}
-        {renderFieldBlock('Blood Pressure & Diet', <Activity size={18} />, groupedFields.pressure)}
+      <form onSubmit={submit} className="stack">
+        <div className="grid-3">
+          {GROUPS.map((group) => (
+            <Card key={group.title}>
+              <CardHeader icon={group.icon} tone={group.tone} title={group.title} />
+              <div className="stack">
+                {group.fields.map((field) => (
+                  <OptionChips key={field.key} field={field} value={form[field.key]} onChange={(v) => setForm((prev) => ({ ...prev, [field.key]: v }))} />
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
 
-        <div style={{ gridColumn: 'span 12', display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-          <button className="btn-primary" type="submit" disabled={loading} style={{ minWidth: '220px' }}>
-            {loading ? 'Analyzing...' : 'Predict Heart Health'}
-          </button>
+        {prediction.isError && <Alert tone="error">{prediction.error?.message || 'Unable to run heart health prediction right now.'}</Alert>}
+
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <Button type="submit" variant="primary" size="lg" icon={Stethoscope} loading={prediction.isPending} className="grow" style={{ maxWidth: 360 }}>
+            Predict heart health
+          </Button>
         </div>
       </form>
 
-      {error && (
-        <div className="card" style={{ gridColumn: 'span 12', borderColor: 'rgba(239,68,68,0.4)', color: '#f87171' }}>
-          {error}
-        </div>
-      )}
-
       {result && (
-        <div className="card" style={{ gridColumn: 'span 12', borderColor: `${result.color}66` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <div>
-              <div className="text-muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700 }}>Predicted Stage</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: result.color }}>{result.stage}</div>
+        <motion.div id="hh-result" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <Card style={{ borderColor: result.color }}>
+            <div className="grid-3" style={{ marginBottom: 18 }}>
+              <div className="stat">
+                <span className="stat__label">Predicted stage</span>
+                <span className="stat__value" style={{ color: result.color, fontFamily: 'var(--font-display)' }}>{result.stage}</span>
+              </div>
+              <div className="stat">
+                <span className="stat__label">Confidence</span>
+                <span className="stat__value">{result.confidence}%</span>
+              </div>
+              <div className="stat">
+                <span className="stat__label">Priority</span>
+                <span><Badge tone="gold">{result.recommendation?.priority}</Badge></span>
+              </div>
             </div>
-            <div>
-              <div className="text-muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700 }}>Confidence</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{result.confidence}%</div>
-            </div>
-            <div>
-              <div className="text-muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700 }}>Priority</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: result.color }}>{result.recommendation?.priority}</div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '0.9rem' }}>
-            <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>{result.recommendation?.title}</div>
-            <p className="text-muted" style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>{result.recommendation?.description}</p>
-          </div>
-
-          <div>
-            <div className="text-muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem' }}>Recommended Actions</div>
-            <ul style={{ marginLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: 6 }}>{result.recommendation?.title}</h3>
+            <p className="muted" style={{ marginBottom: 14 }}>{result.recommendation?.description}</p>
+            <span className="eyebrow">Recommended actions</span>
+            <ul className="list" style={{ marginTop: 10 }}>
               {(result.recommendation?.actions || []).map((action, index) => (
-                <li key={`${action}-${index}`} style={{ fontSize: '0.9rem' }}>{action}</li>
+                <li key={`${action}-${index}`} className="list-row small">
+                  <span className="mono gold" style={{ fontWeight: 700 }}>{index + 1}</span>
+                  {action}
+                </li>
               ))}
             </ul>
-          </div>
-        </div>
+          </Card>
+        </motion.div>
       )}
-    </motion.div>
+    </div>
   )
 }
