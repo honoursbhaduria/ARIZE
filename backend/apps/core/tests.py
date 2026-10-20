@@ -272,3 +272,11 @@ class MusicSearchTests(TestCase):
     def test_upstream_failure_is_502(self):
         with mock.patch('apps.core.views.audius_search_tracks', side_effect=RuntimeError('down')):
             self.assertEqual(self.client.get('/api/music/search/', {'q': 'rock'}).status_code, 502)
+
+
+class ChatFallbackLabelTests(TestCase):
+    def test_canned_answer_is_labelled_fallback_when_groq_fails(self):
+        from apps.core.services import build_rag_response
+        with mock.patch('apps.core.services.groq_chat_completion', return_value=None):
+            result = build_rag_response('hello', {'profile': {}, 'recent': {}})
+        self.assertEqual(result['source'], 'fallback')

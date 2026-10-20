@@ -127,7 +127,13 @@ def retrieve_chat_memory_context(user, message: str, top_k: int = 4) -> str:
         return ''
 
 
-def groq_chat_completion(messages: list, model: str = "llama-3.3-70b-versatile"):
+# Groq models (the older llama-3.x ids were retired and now return model_not_found).
+GROQ_CHAT_MODEL = 'openai/gpt-oss-120b'
+GROQ_FAST_MODEL = 'openai/gpt-oss-20b'
+GROQ_VISION_MODEL = 'qwen/qwen3.8-27b'
+
+
+def groq_chat_completion(messages: list, model: str = GROQ_CHAT_MODEL):
     """
     Send messages to Groq API and get a completion.
     Falls back to rule-based response if API fails.
@@ -411,7 +417,7 @@ def recognize_food_from_image(image_data: str):
         # Try vision-capable Groq models in order of preference
         vision_models = [
             os.getenv('GROQ_VISION_MODEL', '').strip(),
-            'meta-llama/llama-4-scout-17b-16e-instruct',
+            GROQ_VISION_MODEL,
         ]
 
         for model_name in vision_models:
@@ -563,17 +569,18 @@ def _langgraph_chat_answer(message: str, context: dict, messages: list):
     state_graph = StateGraph(dict)
 
     def node_primary(state):
-        text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_CHAT_PRIMARY_MODEL', 'llama-3.3-70b-versatile'))
+        text = groq_chat_completion(state['messages'], model=GROQ_CHAT_MODEL)
         state['response'] = text or ''
         return state
 
     def node_secondary(state):
-        text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_CHAT_RETRY_MODEL', 'llama-3.1-8b-instant'))
+        text = groq_chat_completion(state['messages'], model=GROQ_FAST_MODEL)
         state['response'] = text or ''
         return state
 
     def node_fallback(state):
-        state['response'] = _chat_fallback_answer(state['message'], state['context'])
+        # Leave the response empty so the caller labels the rule-based answer as 'fallback'.
+        state['response'] = ''
         return state
 
     def route_primary(state):
@@ -607,12 +614,12 @@ def _langgraph_recommendation_text(user_profile: dict, recent_metrics: dict, mes
     state_graph = StateGraph(dict)
 
     def node_primary(state):
-        text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_RECO_PRIMARY_MODEL', 'llama-3.3-70b-versatile'))
+        text = groq_chat_completion(state['messages'], model=GROQ_CHAT_MODEL)
         state['ai_text'] = text or ''
         return state
 
     def node_secondary(state):
-        text = groq_chat_completion(state['messages'], model=os.getenv('LANGGRAPH_RECO_RETRY_MODEL', 'llama-3.1-8b-instant'))
+        text = groq_chat_completion(state['messages'], model=GROQ_FAST_MODEL)
         state['ai_text'] = text or ''
         return state
 
@@ -668,7 +675,10 @@ If asked about medications, symptoms, or diagnoses, respond helpfully but always
 
     messages.append({"role": "user", "content": message})
 
-    response = _langgraph_chat_answer(message, context, messages) or groq_chat_completion(messages)
+    if _is_langgraph_enabled():
+        response = _langgraph_chat_answer(message, context, messages)  # already retried with a second model
+    else:
+        response = groq_chat_completion(messages)
 
     if response:
         return {
@@ -704,7 +714,7 @@ Provide:
         {"role": "user", "content": prompt}
     ]
 
-    response = groq_chat_completion(messages, model="llama-3.1-8b-instant")
+    response = groq_chat_completion(messages, model=GROQ_FAST_MODEL)
 
     if response:
         # Parse AI response
@@ -851,7 +861,7 @@ def nutrition_lookup(query: str, grams: float = None):
     response = groq_chat_completion([
         {"role": "system", "content": "You are a nutrition database. Provide accurate estimates."},
         {"role": "user", "content": f"Estimate nutrition for 100g of: {food}\nRespond in this exact format (numbers only):\nCalories: [number]\nProtein: [number]g\nCarbs: [number]g\nFats: [number]g"},
-    ], model="llama-3.1-8b-instant")
+    ], model=GROQ_FAST_MODEL)
     if response:
         per = {}
         for line in response.strip().split('\n'):
@@ -892,7 +902,7 @@ def groq_calorie_lookup(query: str):
         },
     ]
 
-    response = groq_chat_completion(messages, model="llama-3.1-8b-instant")
+    response = groq_chat_completion(messages, model=GROQ_FAST_MODEL)
     if not response:
         return None
 
@@ -1613,7 +1623,7 @@ def langchain_shopping_intent(user_message: str, profile_context: str = ''):
         return None
 
     try:
-        model_name = os.getenv('LANGCHAIN_SHOPPING_MODEL', 'llama-3.3-70b-versatile')
+        model_name = os.getenv('LANGCHAIN_SHOPPING_MODEL', GROQ_CHAT_MODEL)
         llm = ChatGroq(
             groq_api_key=api_key,
             model_name=model_name,
@@ -1836,7 +1846,7 @@ def groq_shopping_fallback_queries(user_message: str, user_profile: dict = None)
         },
     ]
 
-    raw = groq_chat_completion(messages, model='llama-3.1-8b-instant') or ''
+    raw = groq_chat_completion(messages, model=GROQ_FAST_MODEL) or ''
     parsed = _parse_shopping_json(re.sub(r'```(?:json)?', '', raw).strip())
     if not parsed:
         return []
@@ -2103,7 +2113,7 @@ def generate_ai_workout_plan(user_prompt: str, profile: dict = None) -> list:
         {"role": "user", "content": user_content},
     ]
 
-    response = groq_chat_completion(messages, model="llama-3.3-70b-versatile")
+    response = groq_chat_completion(messages, model=GROQ_CHAT_MODEL)
     if not response:
         return _default_workout_plan()
 
