@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Dumbbell, Flame, Heart, Leaf, Music as MusicIcon, Pause, Play, Search, SkipBack, SkipForward, Square, Volume2, VolumeX, Zap } from 'lucide-react'
+import { Dumbbell, Flame, Heart, Leaf, Music as MusicIcon, Pause, Play, Search, SkipBack, SkipForward, Square, Volume2, VolumeX, X, Zap } from 'lucide-react'
 import { musicSearchQuery } from '../lib/queries'
 import { useMusic } from '../lib/music-context'
-import { Alert, Button, Card, CardHeader, EmptyState, PageHeader } from '../ui/components'
+import { Alert, Card, CardHeader, EmptyState, PageHeader, Skeleton } from '../ui/components'
 import TrackArt from '../components/TrackArt'
 import './Music.css'
 
@@ -14,6 +14,8 @@ const MOODS = [
   { key: 'relax', label: 'Relax', hint: 'Cooldown & recovery', icon: Heart, tone: 'red' },
   { key: 'yoga', label: 'Yoga', hint: 'Breath and flow', icon: Leaf, tone: 'green' },
 ]
+
+const SUGGESTIONS = ['Workout hip hop', 'Gym motivation', 'EDM', 'Rock', 'Lo-fi']
 
 const clock = (seconds) => {
   const s = Math.max(0, Math.floor(seconds || 0))
@@ -31,6 +33,17 @@ export default function Music() {
   const [submitted, setSubmitted] = useState('')
   const [lastVolume, setLastVolume] = useState(0.8)
   const results = useQuery(musicSearchQuery(submitted))
+
+  // Search as you type, after a short pause.
+  useEffect(() => {
+    const id = setTimeout(() => setSubmitted(term), 450)
+    return () => clearTimeout(id)
+  }, [term])
+
+  const searchFor = (value) => {
+    setTerm(value)
+    setSubmitted(value)
+  }
   const muted = music.volume === 0
 
   const toggleMute = () => {
@@ -102,20 +115,42 @@ export default function Music() {
 
       <Card className="stack">
         <CardHeader icon={Search} tone="gold" title="Search music" subtitle="Any song, artist or genre" />
-        <form className="music-search" onSubmit={(e) => { e.preventDefault(); setSubmitted(term) }}>
+        <form className="music-search" role="search" onSubmit={(e) => { e.preventDefault(); setSubmitted(term) }}>
+          <Search size={18} className="music-search__icon" aria-hidden="true" />
           <input
             className="input"
             type="search"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            placeholder="e.g. Eminem, lo-fi, Eye of the Tiger"
+            placeholder="Song, artist or genre"
             aria-label="Search songs"
+            enterKeyHint="search"
+            autoComplete="off"
           />
-          <Button type="submit" variant="primary" icon={Search} loading={results.isFetching} disabled={term.trim().length < 2} aria-label="Find songs" />
+          {results.isFetching ? (
+            <span className="spinner music-search__end" aria-label="Searching" />
+          ) : term && (
+            <button type="button" className="icon-btn music-search__end" onClick={() => searchFor('')} aria-label="Clear search"><X size={16} /></button>
+          )}
         </form>
+
+        {!submitted.trim() && (
+          <div className="music-suggest">
+            {SUGGESTIONS.map((s) => (
+              <button key={s} type="button" className="chip" onClick={() => searchFor(s)}>{s}</button>
+            ))}
+          </div>
+        )}
+        {submitted.trim().length === 1 && <p className="tiny dim">Type at least 2 letters.</p>}
+        {results.isLoading && (
+          <div className="stack-sm">{[0, 1, 2].map((i) => <Skeleton key={i} height={56} />)}</div>
+        )}
         {results.isError && <Alert tone="error">{results.error?.message || 'Search is unavailable right now.'}</Alert>}
         {results.isSuccess && results.data.length === 0 && (
           <EmptyState icon={MusicIcon} title="No songs found">Try another song, artist or genre.</EmptyState>
+        )}
+        {results.data?.length > 0 && (
+          <p className="tiny muted">{results.data.length} songs · tap one to play, the rest queue up after it</p>
         )}
         {results.data?.length > 0 && (
           <ol className="list music-results">
@@ -135,6 +170,7 @@ export default function Music() {
                       <span className="truncate tiny muted" style={{ display: 'block' }}>{item.artist}</span>
                     </span>
                     {current && playing ? <Volume2 size={16} className="gold" /> : <span className="tiny mono dim">{clock(item.duration)}</span>}
+                    <span className="up-next__play" aria-hidden="true">{current && playing ? <Pause size={14} /> : <Play size={14} />}</span>
                   </button>
                 </li>
               )
@@ -154,7 +190,7 @@ export default function Music() {
                 <button
                   key={mood.key}
                   type="button"
-                  className={`music-mood ${active ? 'is-active' : ''}`}
+                  className={`music-mood ${active ? 'is-active' : ''} ${loading && active ? 'is-loading' : ''}`}
                   onClick={() => music.playMood(mood.key)}
                   disabled={loading}
                   aria-pressed={active}

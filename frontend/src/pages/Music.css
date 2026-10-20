@@ -46,10 +46,29 @@
 .player input[type='range'].player__volume { width: min(260px, 100%); align-self: center; }
 
 /* Search */
-.music-search { display: flex; gap: 8px; }
-.music-search .input { flex: 1; min-width: 0; }
+.music-search { position: relative; display: flex; align-items: center; }
+.music-search .input { flex: 1; min-width: 0; padding-left: 42px; padding-right: 44px; }
+.music-search .input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.music-search__icon { position: absolute; left: 14px; color: var(--text-muted, var(--muted)); pointer-events: none; }
+.music-search__end { position: absolute; right: 8px; }
+span.music-search__end { right: 14px; }
+.music-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+.music-suggest .chip {
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--bg-raised);
+  color: var(--text); font-size: 0.82rem; font-weight: 600;
+}
+.music-suggest .chip:hover { border-color: var(--gold-deep); background: var(--gold-ink); }
 .music-results { max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
 .up-next.is-current { border-color: var(--gold-deep); background: var(--gold-ink); }
+.up-next__play {
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--gold-deep); color: var(--gold);
+}
+@media (max-width: 480px) {
+  .music-results { max-height: 300px; }
+}
 
 /* Mood picker */
 .music-moods {
@@ -71,8 +90,13 @@
 .music-mood:hover:not(:disabled), .music-mood.is-active { border-color: var(--gold-deep); background: var(--gold-ink); }
 .music-mood__text { display: flex; flex-direction: column; min-width: 0; }
 @media (max-width: 480px) {
-  .music-moods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .music-mood { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; }
+  /* Compact text-only chips on phones */
+  .music-moods { display: flex; flex-wrap: wrap; gap: 8px; }
+  .music-mood { flex: 1 1 28%; justify-content: center; text-align: center; padding: 10px 6px; }
+  .music-mood .icon-tile { display: none; }
+  .music-mood__text { align-items: center; }
+  .music-mood__text .tiny { display: none; }
+  .music-mood.is-loading::after { content: '…'; }
 }
 
 /* Up next */
