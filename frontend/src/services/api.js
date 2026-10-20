@@ -262,6 +262,17 @@ export async function supabaseGoogleLogin() {
   return data
 }
 
+// Which OAuth providers are switched on in the Supabase project (public endpoint).
+export async function fetchSupabaseProviders() {
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+  if (!supabase || !url || !key) return {}
+  const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: key } })
+  if (!response.ok) return {}
+  const settings = await response.json()
+  return settings?.external || {}
+}
+
 // Completes an OAuth redirect: exchanges any pending Supabase session.
 export async function completeSupabaseRedirect() {
   if (!supabase) {

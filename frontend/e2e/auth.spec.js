@@ -5,7 +5,7 @@ test.describe('auth & onboarding', () => {
   test('landing page leads to sign up', async ({ page }) => {
     const errors = collectErrors(page)
     await page.goto('/')
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Level up your body')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Train harder')
     await page.getByRole('link', { name: /start training/i }).first().click()
     await expect(page).toHaveURL(/\/register$/)
     await expect(page.getByRole('heading', { name: 'Create account' })).toBeVisible()

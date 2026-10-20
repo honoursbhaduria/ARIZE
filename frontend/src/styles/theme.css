@@ -1,47 +1,50 @@
+/* Declared first so it has the lowest priority (below Tailwind's layers on the landing page). */
+@layer arize-reset;
+
 /* ==========================================================================
    ARIZE design system — dark, game-like, mobile-first.
    Every page composes these classes; page-specific CSS should be rare.
    ========================================================================== */
 
 :root {
-  /* Surfaces */
-  --bg: #0b0b14;
-  --bg-raised: #10101c;
-  --surface: #161626;
-  --surface-2: #1d1d33;
-  --surface-3: #26264a;
-  --border: #2a2a46;
-  --border-strong: #3a3a62;
+  /* Surfaces — palette extracted from boot.dev (scripts/extract_background.mjs) */
+  --bg: #121620;          /* gray-950 */
+  --bg-raised: #181b26;   /* gray-900 */
+  --surface: rgba(24, 27, 38, 0.72);
+  --surface-2: #202330;   /* gray-850 */
+  --surface-3: #323845;   /* gray-750 */
+  --border: #323845;      /* gray-750 */
+  --border-strong: #4e5564; /* gray-600 */
 
   /* Text */
-  --text: #f3f1ff;
-  --text-muted: #a3a1c2;
-  --text-dim: #6e6c8f;
+  --text: #e8ecf1;        /* gray-100 */
+  --text-muted: #b2c1d0;  /* gray-300 */
+  --text-dim: #818a98;    /* gray-450 */
 
   /* Brand */
-  --gold: #ffc83d;
-  --gold-deep: #c68e00;
-  --gold-ink: #241a00;
-  --violet: #8b6cff;
-  --violet-deep: #5a3fd1;
-  --green: #3ddc84;
-  --green-deep: #1f9c57;
-  --red: #ff5c6c;
-  --red-deep: #c23545;
-  --orange: #ff9f43;
-  --blue: #4cc9f0;
-  --pink: #ff6fb5;
+  --gold: #efbb03;        /* yellow-500 */
+  --gold-deep: #c18500;   /* yellow-600 */
+  --gold-ink: #2a1c0c;    /* yellow-950 */
+  --violet: #42a0ed;      /* cyan-500 (gem blue) */
+  --violet-deep: #1167ae; /* cyan-700 */
+  --green: #41f179;       /* green-500 */
+  --green-deep: #0db543;  /* green-700 */
+  --red: #ed4245;         /* red-500 */
+  --red-deep: #a81012;    /* red-800 */
+  --orange: #f6bd45;      /* yellow-300 */
+  --blue: #67b3f1;        /* cyan-400 */
+  --pink: #f58f91;        /* red-300 */
 
-  /* Shape & motion */
-  --radius-sm: 8px;
-  --radius: 14px;
-  --radius-lg: 20px;
+  /* Shape & motion: boot.dev uses near-square corners */
+  --radius-sm: 3px;
+  --radius: 4px;
+  --radius-lg: 6px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.8);
+  --shadow-card: none;
 
   /* Type */
-  --font-display: 'Chakra Petch', 'Inter', system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Alegreya', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Layout */
@@ -67,41 +70,99 @@
   :root { --gutter: 32px; }
 }
 
-/* ---------- Reset ---------- */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ---------- Reset ----------
+   Element-level rules live in a low-priority layer so Tailwind utilities
+   (used by the shadcn components on the landing page) can override them. */
+@layer arize-reset {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; }
 
-body {
-  font-family: var(--font-body);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 15px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100dvh;
-  overflow-x: hidden;
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  img, video, canvas, svg { display: block; max-width: 100%; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  input, select, textarea { font: inherit; color: inherit; }
+  a { color: inherit; text-decoration: none; }
+  ul, ol { list-style: none; }
+  h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spacing: -0.01em; font-weight: 700; }
+
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+
+  ::selection { background: var(--violet); color: #fff; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 10px; border: 2px solid var(--bg); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 }
 
-img, video, canvas, svg { display: block; max-width: 100%; }
-button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-button:disabled { cursor: not-allowed; }
-input, select, textarea { font: inherit; color: inherit; }
-a { color: inherit; text-decoration: none; }
-ul, ol { list-style: none; }
-h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spacing: -0.01em; font-weight: 700; }
-
-:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
-
-::selection { background: var(--violet); color: #fff; }
-
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 10px; border: 2px solid var(--bg); }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+/* ---------- Page background ----------
+   boot.dev's section recipe: their map texture overlay-blended on a
+   gray-950 -> gray-900 gradient. Fallback: /textures/stone.webp, generated
+   by scripts/generate_texture.py, if this texture can't be used. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url('/textures/maptexture2.webp'), linear-gradient(#121620, #181b26);
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  background-blend-mode: overlay, overlay;
 }
+
+/* ---------- Logo ----------
+   Stone texture blended over a gold gradient, clipped to the letters,
+   with a thin dark edge so it reads as engraved metal. */
+.logo {
+  display: inline-block;
+  font-family: 'Alegreya', Georgia, serif;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: transparent;
+  background-image: url('/textures/logo-gold.webp');
+  background-size: 5em 5em;
+  background-position: 20% 35%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 0.6px rgba(42, 28, 12, 0.85);
+  user-select: none;
+  transition: filter 0.2s ease;
+}
+.logo:hover { filter: brightness(1.12); }
+.logo--sm { font-size: 1.25rem; }
+.logo--md { font-size: 1.5rem; }
+.logo--lg { font-size: 2.6rem; -webkit-text-stroke-width: 1px; }
+.logo--xl { font-size: clamp(3.2rem, 11vw, 5rem); -webkit-text-stroke-width: 1.2px; }
+
+/* Same engraved-metal fill as the logo, for accent words in headings. */
+.text-metal {
+  color: transparent;
+  background-size: 2.2em 2.2em;
+  background-position: 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px rgba(42, 28, 12, 0.85);
+}
+.text-metal--gold { background-image: url('/textures/logo-gold.webp'); }
+.text-metal--teal { background-image: url('/textures/logo-teal.webp'); -webkit-text-stroke-color: rgba(4, 27, 46, 0.9); }
 
 /* ---------- Typography helpers ---------- */
 .eyebrow {
@@ -159,7 +220,6 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spa
 .grow { flex: 1; min-width: 0; }
 
 /* Responsive grids — collapse automatically on narrow screens */
-.grid { display: grid; gap: 16px; min-width: 0; }
 .grid-2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 .grid-3 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 .grid-4 { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -183,7 +243,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spa
 
 /* ---------- Cards ---------- */
 .card {
-  background: linear-gradient(180deg, var(--surface) 0%, var(--bg-raised) 100%);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
@@ -194,10 +254,10 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spa
 @media (max-width: 480px) { .card { padding: 16px; border-radius: var(--radius); } }
 
 .card--flush { padding: 0; overflow: hidden; }
-.card--gold { border-color: rgba(255, 200, 61, 0.45); background: linear-gradient(160deg, rgba(255, 200, 61, 0.12), var(--surface) 55%); }
-.card--violet { border-color: rgba(139, 108, 255, 0.45); background: linear-gradient(160deg, rgba(139, 108, 255, 0.16), var(--surface) 55%); }
-.card--green { border-color: rgba(61, 220, 132, 0.4); background: linear-gradient(160deg, rgba(61, 220, 132, 0.12), var(--surface) 55%); }
-.card--red { border-color: rgba(255, 92, 108, 0.45); background: linear-gradient(160deg, rgba(255, 92, 108, 0.12), var(--surface) 55%); }
+.card--gold { border-color: rgba(193, 133, 0, 0.7); background: rgba(42, 28, 12, 0.55); }
+.card--violet { border-color: rgba(17, 103, 174, 0.8); background: rgba(4, 27, 46, 0.55); }
+.card--green { border-color: rgba(13, 181, 67, 0.6); background: rgba(4, 50, 18, 0.5); }
+.card--red { border-color: rgba(168, 16, 18, 0.8); background: rgba(46, 4, 5, 0.55); }
 .card--interactive { transition: transform 0.2s var(--ease), border-color 0.2s, box-shadow 0.2s; }
 .card--interactive:hover { transform: translateY(-3px); border-color: var(--border-strong); box-shadow: 0 18px 40px -20px rgba(139, 108, 255, 0.5); }
 
@@ -222,49 +282,68 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spa
 
 .divider { height: 1px; background: var(--border); border: 0; }
 
-/* ---------- Buttons ---------- */
+/* ---------- Buttons ----------
+   Modelled on boot.dev: dark fill, 2px coloured border, soft glow,
+   serif uppercase label. A light sweep ("shimmer") runs across them. */
 .btn {
   --btn-bg: var(--surface-2);
-  --btn-edge: #0c0c18;
+  --btn-border: var(--border-strong);
+  --btn-glow: transparent;
   --btn-fg: var(--text);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 46px;
-  padding: 0 20px;
-  border-radius: 12px;
+  padding: 0 22px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.95rem;
-  letter-spacing: 0.04em;
+  font-size: 0.98rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--btn-fg);
   background: var(--btn-bg);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 0 var(--btn-edge);
-  transform: translateY(0);
-  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s, background 0.15s;
+  border: 2px solid var(--btn-border);
+  box-shadow: 0 0 22px -4px var(--btn-glow);
+  transition: transform 0.08s ease, box-shadow 0.2s ease, filter 0.15s, border-color 0.15s;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.btn:hover:not(:disabled) { filter: brightness(1.08); }
-.btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--btn-edge); }
-.btn:disabled { opacity: 0.5; }
-
-.btn--primary { --btn-bg: var(--gold); --btn-edge: var(--gold-deep); --btn-fg: var(--gold-ink); }
-.btn--violet { --btn-bg: var(--violet); --btn-edge: var(--violet-deep); --btn-fg: #fff; }
-.btn--green { --btn-bg: var(--green); --btn-edge: var(--green-deep); --btn-fg: #04220f; }
-.btn--danger { --btn-bg: var(--red); --btn-edge: var(--red-deep); --btn-fg: #fff; }
-.btn--ghost {
-  --btn-bg: transparent; --btn-edge: transparent;
-  border-color: var(--border-strong);
-  box-shadow: none;
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px auto -2px -60%;
+  width: 45%;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.22) 45%, rgba(255, 255, 255, 0.05) 60%, transparent 100%);
+  transform: skewX(-18deg);
+  animation: btn-shimmer 3.2s ease-in-out infinite;
+  pointer-events: none;
 }
-.btn--ghost:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
-.btn--sm { min-height: 36px; padding: 0 14px; font-size: 0.8rem; border-radius: 10px; box-shadow: 0 3px 0 var(--btn-edge); }
-.btn--lg { min-height: 56px; padding: 0 28px; font-size: 1.05rem; border-radius: 14px; box-shadow: 0 5px 0 var(--btn-edge); }
+.btn:hover:not(:disabled)::after { animation-duration: 1.1s; }
+.btn:hover:not(:disabled) { filter: brightness(1.12); box-shadow: 0 0 30px -2px var(--btn-glow); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; }
+.btn:disabled::after { animation: none; }
+
+@keyframes btn-shimmer {
+  0% { left: -60%; }
+  55%, 100% { left: 130%; }
+}
+
+.btn--primary { --btn-bg: #2a1c0c; --btn-border: #c18500; --btn-glow: rgba(239, 187, 3, 0.45); --btn-fg: #fde9b0; }
+.btn--violet { --btn-bg: #041b2e; --btn-border: #1586e1; --btn-glow: rgba(66, 160, 237, 0.45); --btn-fg: #d7ebfb; }
+.btn--green { --btn-bg: #043212; --btn-border: #0db543; --btn-glow: rgba(65, 241, 121, 0.4); --btn-fg: #d4fbe1; }
+.btn--danger { --btn-bg: #2e0405; --btn-border: #cd1316; --btn-glow: rgba(237, 66, 69, 0.4); --btn-fg: #fcd9da; }
+.btn--ghost { --btn-bg: transparent; --btn-border: var(--border-strong); }
+.btn--ghost::after { opacity: 0.5; }
+.btn--sm { min-height: 36px; padding: 0 14px; font-size: 0.82rem; }
+.btn--lg { min-height: 56px; padding: 0 32px; font-size: 1.08rem; }
 .btn--block { width: 100%; }
 
 .icon-btn {
@@ -357,12 +436,12 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spa
 .bar__fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--violet), #b28cff);
+  background: var(--violet);
   transition: width 0.6s var(--ease);
   position: relative;
 }
-.bar__fill--gold { background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
-.bar__fill--green { background: linear-gradient(90deg, var(--green-deep), var(--green)); }
+.bar__fill--gold { background: var(--gold); }
+.bar__fill--green { background: var(--green); }
 .bar__fill::after {
   content: '';
   position: absolute; inset: 0;
@@ -543,14 +622,5 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; letter-spa
 }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 
-/* ---------- Mascot mode effects (body classes) ---------- */
-body.beast-mode-active .card { border-color: rgba(255, 92, 108, 0.55); }
-body.beast-mode-active::after {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 90;
-  box-shadow: inset 0 0 120px rgba(255, 62, 62, 0.22);
-  animation: beast-pulse 1s infinite alternate;
-}
-@keyframes beast-pulse { from { opacity: 0.5; } to { opacity: 1; } }
-body.zen-mode-active .card { border-color: rgba(76, 201, 240, 0.45); }
-body.recovery-mode-active .card { border-color: rgba(61, 220, 132, 0.45); }
+/* ---------- Profile theme ---------- */
 body.female-theme-active { --violet: #ff6fb5; --violet-deep: #c23f86; }

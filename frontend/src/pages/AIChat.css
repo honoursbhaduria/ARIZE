@@ -1,0 +1,40 @@
+/* AI Coach chat: fixed-height panel on desktop, full-screen chat on phones. */
+.chat-card {
+  height: min(720px, calc(100dvh - 210px));
+  min-height: 460px;
+  gap: 14px;
+}
+
+.chat-prompts .chip { white-space: nowrap; }
+
+@media (max-width: 1023px) {
+  /* The top bar already says "AI Coach", so the big page header only costs space. */
+  .chat-page { padding-top: 12px; gap: 14px; }
+  .chat-page > .page-header { display: none; }
+
+  .chat-card {
+    height: calc(100dvh - var(--hud-h) - var(--bottom-nav-h) - 28px - env(safe-area-inset-bottom));
+    min-height: 360px;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .chat-card .bubble { max-width: 88%; font-size: 0.93rem; padding: 10px 14px; }
+  .chat-empty { padding: 16px 8px; gap: 8px; }
+  .chat-empty svg { width: 34px; height: 34px; }
+
+  /* One swipeable row of suggestions instead of a tall stack */
+  .chat-prompts {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 -12px;
+    padding: 0 12px 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chat-prompts::-webkit-scrollbar { display: none; }
+
+  .chat-composer { gap: 8px; }
+  .chat-composer .textarea { min-height: 46px; padding: 11px 12px; }
+  .chat-composer .btn { min-height: 46px; padding: 0 14px; }
+}

@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Star } from 'lucide-react'
 import { ToastContext } from './toast-context'
 
-const ICONS = { success: CheckCircle2, error: AlertCircle, xp: Sparkles }
+const ICONS = { success: CheckCircle2, error: AlertCircle, xp: Star }
 
 export function Toaster({ children }) {
   const [toasts, setToasts] = useState([])

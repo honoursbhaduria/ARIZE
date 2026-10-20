@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Sparkles, UserPlus } from 'lucide-react'
-import { exchangeSupabaseSession, loginAsDemo, registerUser, supabaseRegister } from '../services/api'
+import { Eye, EyeOff, PlayCircle, UserPlus } from 'lucide-react'
+import { loginAsDemo } from '../services/api'
+import { registerAccount } from '../lib/auth'
 import AuthLayout from '../layouts/AuthLayout'
 import { Alert, Button, Field, Input } from '../ui/components'
 
@@ -18,39 +19,10 @@ export default function Register() {
 
   const handleRegister = async (event) => {
     event.preventDefault()
-    const username = form.username.trim()
-    const email = form.email.trim()
-
-    if (!username || !email || !form.password) {
-      setError('Please fill in all fields.')
-      return
-    }
-    if (form.password.length < 8) {
-      setError('Password must be at least 8 characters long.')
-      return
-    }
-
     setPending('register')
     setError('')
     try {
-      let sbSession = null
-      try {
-        sbSession = await supabaseRegister({ email, password: form.password, username })
-      } catch (sbErr) {
-        if (/already registered|already in use/i.test(sbErr.message || '')) {
-          throw new Error('A user with that email already exists. Please sign in instead.')
-        }
-        console.warn('Supabase signup notice:', sbErr.message)
-      }
-
-      try {
-        await registerUser({ username, email, password: form.password })
-      } catch (apiErr) {
-        // Backend signup failed but Supabase gave us a session: exchange it instead.
-        if (!sbSession) throw apiErr
-        await exchangeSupabaseSession(sbSession)
-      }
-
+      await registerAccount(form)
       queryClient.clear()
       navigate({ to: '/onboarding' })
     } catch (err) {
@@ -104,7 +76,7 @@ export default function Register() {
 
       <div className="auth__divider">or</div>
 
-      <Button variant="violet" block icon={Sparkles} loading={pending === 'demo'} disabled={busy} onClick={handleDemo}>
+      <Button variant="violet" block icon={PlayCircle} loading={pending === 'demo'} disabled={busy} onClick={handleDemo}>
         Explore the demo first
       </Button>
 

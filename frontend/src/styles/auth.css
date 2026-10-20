@@ -8,8 +8,7 @@
 .auth__form-side {
   display: flex; flex-direction: column;
   padding: 20px var(--gutter) 40px;
-  background:
-    radial-gradient(70% 50% at 0% 0%, rgba(139, 108, 255, 0.16), transparent 70%);
+  background: transparent;
 }
 .auth__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .auth__panel { width: 100%; max-width: 420px; margin: auto; padding-top: 32px; display: flex; flex-direction: column; gap: 18px; }

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, Check, ChevronLeft, ChevronRight, Dumbbell, HeartPulse, MapPin, Search, Target, User, Zap } from 'lucide-react'
+import { Activity, Check, ChevronLeft, ChevronRight, HeartPulse, MapPin, Search, Target, User, Zap } from 'lucide-react'
 import { districtsQuery, useUpdateProfile } from '../lib/queries'
+import Logo from '../components/Logo'
 import { DIET_OPTIONS, GENDER_OPTIONS, GOAL_OPTIONS, cleanProfilePayload } from '../lib/profile'
 import { Alert, Button, Field, Input, ProgressBar, Textarea } from '../ui/components'
 
@@ -277,10 +278,7 @@ export default function Onboarding() {
   return (
     <div className="page" style={{ maxWidth: 560, minHeight: '100dvh', justifyContent: 'center' }}>
       <div className="spread">
-        <span className="brand" style={{ fontSize: '1.1rem' }}>
-          <span className="brand__mark"><Dumbbell size={16} strokeWidth={2.6} /></span>
-          ARIZE
-        </span>
+        <Logo size="sm" to="/dashboard" />
         <span className="eyebrow">Step {stepIndex + 1} / {steps.length}</span>
       </div>
       <ProgressBar value={progress} tone="gold" label="Setup progress" />

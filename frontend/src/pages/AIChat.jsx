@@ -6,6 +6,7 @@ import { profileQuery } from '../lib/queries'
 import BmiCard from '../components/BmiCard'
 import { Alert, Badge, Button, Card, CardHeader, PageHeader } from '../ui/components'
 import { ConfirmDialog } from '../ui/Modal'
+import './AIChat.css'
 
 const HISTORY_KEY = 'arize_ai_history'
 
@@ -101,11 +102,11 @@ export default function AIChat() {
   ]
 
   return (
-    <div className="page">
+    <div className="page chat-page">
       <PageHeader eyebrow="Personal trainer" title="AI Coach" subtitle="Ask anything about training, food, sleep or recovery. Answers use your profile and history." />
 
       <div className="split">
-        <Card className="stack" style={{ height: 'min(720px, calc(100dvh - 210px))', minHeight: 460, gap: 14 }}>
+        <Card className="stack chat-card">
           <div className="spread">
             <div className="row">
               <span className="icon-tile icon-tile--violet"><Bot size={20} /></span>
@@ -121,7 +122,7 @@ export default function AIChat() {
 
           <div className="chat-log grow" ref={logRef} aria-live="polite">
             {history.length === 0 && !loading ? (
-              <div className="empty" style={{ margin: 'auto' }}>
+              <div className="empty chat-empty" style={{ margin: 'auto' }}>
                 <Bot size={44} strokeWidth={1.5} />
                 <h3 style={{ color: 'var(--text)' }}>Your coach is ready</h3>
                 <p className="small" style={{ maxWidth: '36ch' }}>I remember our conversations and use your health data for personalised advice.</p>
@@ -147,7 +148,7 @@ export default function AIChat() {
           </div>
 
           {history.length === 0 && (
-            <div className="row-wrap">
+            <div className="row-wrap chat-prompts">
               {QUICK_PROMPTS.map((prompt) => (
                 <button key={prompt} type="button" className="chip" onClick={() => askAi(prompt)}>{prompt}</button>
               ))}
@@ -155,7 +156,7 @@ export default function AIChat() {
           )}
 
           <form
-            className="composer"
+            className="composer chat-composer"
             onSubmit={(e) => {
               e.preventDefault()
               askAi()
@@ -172,7 +173,7 @@ export default function AIChat() {
                   askAi()
                 }
               }}
-              placeholder="Ask about workouts, nutrition, sleep…"
+              placeholder="Ask your coach…"
               aria-label="Message the AI coach"
             />
             <Button type="submit" variant="primary" icon={Send} loading={loading} disabled={!question.trim()} aria-label="Send" />

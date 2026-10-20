@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Dumbbell, Flame, LayoutGrid, LogOut, Sparkles } from 'lucide-react'
+import { Flame, LayoutGrid, LogOut, Star, UserRound } from 'lucide-react'
 import { clearAuthSession, getCurrentUser } from '../services/api'
 import { profileQuery, usePlayerStats } from '../lib/queries'
+import Logo from '../components/Logo'
 import { Modal } from '../ui/Modal'
 import { ProgressBar } from '../ui/components'
-import GymMascot from '../components/GymMascot'
 import { NAV_GROUPS, TAB_ITEMS, titleForPath } from './nav'
 import '../styles/shell.css'
 
-function initialsOf(name) {
-  return (name || 'G').slice(0, 2).toUpperCase()
+function ProfileAvatar({ small = false, label }) {
+  return (
+    <span className={`avatar ${small ? 'avatar--sm' : ''}`} aria-hidden={label ? undefined : 'true'} aria-label={label}>
+      <UserRound strokeWidth={2.2} fill="currentColor" fillOpacity={0.25} />
+    </span>
+  )
 }
 
 function NavLink({ item, onNavigate }) {
@@ -55,14 +59,13 @@ export default function AppLayout() {
       {isLoading && <div className="route-progress" aria-hidden="true" />}
 
       <aside className="sidebar" aria-label="Main navigation">
-        <Link to="/dashboard" className="brand">
-          <span className="brand__mark"><Dumbbell size={18} strokeWidth={2.6} /></span>
-          ARIZE
-        </Link>
+        <div style={{ padding: '6px 8px 18px' }}>
+          <Logo to="/dashboard" size="md" />
+        </div>
 
         <div className="level-card">
           <div className="level-card__top">
-            <span className="avatar">{initialsOf(user?.username)}</span>
+            <ProfileAvatar />
             <div className="grow">
               <div className="truncate" style={{ fontWeight: 700 }}>{user?.username || 'Athlete'}</div>
               <div className="level-pill">Lv {stats.level} · {stats.title}</div>
@@ -94,19 +97,17 @@ export default function AppLayout() {
 
       <div className="shell-main">
         <header className="hud">
-          <Link to="/dashboard" className="brand hide-desktop" aria-label="ARIZE home">
-            <span className="brand__mark"><Dumbbell size={18} strokeWidth={2.6} /></span>
-          </Link>
+          <Logo to="/dashboard" size="sm" className="hide-desktop" />
           <div className="hud__title truncate">{titleForPath(pathname)}</div>
           <div className="hud__right">
             <span className="hud-chip hud-chip--streak" title="Streak days">
               <Flame size={15} /> {stats.streakDays}
             </span>
             <span className="hud-chip hud-chip--xp" title="Total XP">
-              <Sparkles size={15} /> {stats.xp.toLocaleString()}
+              <Star size={15} /> {stats.xp.toLocaleString()}
             </span>
             <Link to="/settings" className="avatar avatar--sm" aria-label="Profile settings">
-              {initialsOf(user?.username)}
+              <UserRound strokeWidth={2.2} fill="currentColor" fillOpacity={0.25} />
             </Link>
           </div>
         </header>
@@ -150,7 +151,6 @@ export default function AppLayout() {
         </button>
       </Modal>
 
-      <GymMascot />
     </div>
   )
 }

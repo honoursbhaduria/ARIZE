@@ -13,7 +13,8 @@ import {
   Plus,
   Settings as SettingsIcon,
   Smartphone,
-  Sparkles,
+  ListChecks,
+  MessageSquare,
   Swords,
   Trash2,
   TrendingUp,
@@ -141,7 +142,7 @@ export default function Dashboard() {
               <Swords size={20} /> Start workout
             </Link>
             <Link to="/chat" className="btn btn--ghost btn--block">
-              <Sparkles size={18} /> Ask AI coach
+              <MessageSquare size={18} /> Ask your coach
             </Link>
           </div>
         </div>
@@ -164,7 +165,7 @@ export default function Dashboard() {
               action={
                 <div className="row">
                   <Badge tone={planPct === 100 ? 'green' : 'gold'}>{doneCount}/{tasks.length} done</Badge>
-                  <Button variant="violet" size="sm" icon={Sparkles} onClick={() => setShowAiInput((v) => !v)}>AI plan</Button>
+                  <Button variant="violet" size="sm" icon={ListChecks} onClick={() => setShowAiInput((v) => !v)}>AI plan</Button>
                 </div>
               }
             />
@@ -190,7 +191,7 @@ export default function Dashboard() {
                         aria-label="Describe the workout you want"
                         autoFocus
                       />
-                      <Button type="submit" variant="violet" icon={Sparkles} loading={aiPlan.isPending}>Generate</Button>
+                      <Button type="submit" variant="violet" icon={ListChecks} loading={aiPlan.isPending}>Generate</Button>
                     </div>
                   </div>
                 </motion.form>

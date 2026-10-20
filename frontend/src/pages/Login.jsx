@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useRouter, useSearch } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, LogIn, Mail, Sparkles } from 'lucide-react'
-import { completeSupabaseRedirect, loginAsDemo, loginUser, supabaseGoogleLogin, supabaseLogin } from '../services/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Eye, EyeOff, LogIn, Mail, PlayCircle } from 'lucide-react'
+import { completeSupabaseRedirect, fetchSupabaseProviders, loginAsDemo, loginUser, supabaseGoogleLogin, supabaseLogin } from '../services/api'
 import AuthLayout from '../layouts/AuthLayout'
 import { Alert, Button, Field, Input } from '../ui/components'
 
@@ -20,6 +20,8 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [pending, setPending] = useState('') // 'credentials' | 'demo' | 'google'
   const [error, setError] = useState('')
+  // Only offer Google once it is enabled in Supabase (Authentication > Providers).
+  const providers = useQuery({ queryKey: ['supabase', 'providers'], queryFn: fetchSupabaseProviders, staleTime: 5 * 60_000 })
 
   const finish = () => {
     queryClient.clear()
@@ -95,7 +97,7 @@ export default function Login() {
         <h1>Sign in</h1>
       </div>
 
-      <Button variant="violet" size="lg" block icon={Sparkles} loading={pending === 'demo'} disabled={busy} onClick={() => run('demo', loginAsDemo)}>
+      <Button variant="violet" size="lg" block icon={PlayCircle} loading={pending === 'demo'} disabled={busy} onClick={() => run('demo', loginAsDemo)}>
         1-click demo
       </Button>
 
@@ -134,9 +136,11 @@ export default function Login() {
         </Button>
       </form>
 
-      <Button variant="ghost" block icon={Mail} loading={pending === 'google'} disabled={busy} onClick={handleGoogle}>
-        Continue with Google
-      </Button>
+      {providers.data?.google && (
+        <Button variant="ghost" block icon={Mail} loading={pending === 'google'} disabled={busy} onClick={handleGoogle}>
+          Continue with Google
+        </Button>
+      )}
 
       <p className="muted center">
         New here? <Link to="/register" className="link">Create an account</Link>
