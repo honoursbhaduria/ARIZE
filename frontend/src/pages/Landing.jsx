@@ -297,32 +297,34 @@ export default function Landing() {
       <div className="divider-wood" />
 
       {/* ---------- How it works ---------- */}
-      <section id="how" className="mx-auto grid max-w-7xl items-center gap-14 px-5 py-16 sm:py-24 sm:px-8 lg:grid-cols-2">
-        <div className="text-center lg:text-left">
-          <h2 className="text-[clamp(2.2rem,5vw,3.4rem)] leading-[1.05] font-bold text-[#e8ecf1]">Your path to a stronger, healthier you</h2>
-          <p className="mx-auto mt-6 max-w-md text-lg text-muted-foreground lg:mx-0">Three steps and you are training with feedback on every rep.</p>
-        </div>
-        <div className="flex flex-col gap-4">
-          {STEPS.map((step, index) => {
-            const highlighted = index === 1
-            return (
-              <Card
-                key={step.title}
-                className={cn(
-                  'flex-row items-start gap-4 rounded-xs px-6',
-                  highlighted ? 'border-2 border-gold-deep bg-gold-ink/70 lg:-ml-10' : 'border-border',
-                )}
-              >
-                <span className={cn('grid size-11 shrink-0 place-items-center rounded-full border', highlighted ? 'border-gold-deep text-gold' : 'border-border text-[#b2c1d0]')}>
-                  <Icon icon={step.icon} />
-                </span>
-                <div>
-                  <h3 className={cn("font-sans text-lg font-semibold tracking-normal", highlighted ? 'text-gold' : 'text-[#e8ecf1]')}>{step.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{step.text}</p>
-                </div>
-              </Card>
-            )
-          })}
+      <section id="how" className="landing-how relative overflow-hidden py-16 sm:py-24">
+        <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 sm:px-8 lg:grid-cols-2">
+          <div className="text-center lg:text-left">
+            <h2 className="text-[clamp(2.2rem,5vw,3.4rem)] leading-[1.05] font-bold text-[#e8ecf1]">Your path to a stronger, healthier you</h2>
+            <p className="mx-auto mt-6 max-w-md text-lg text-muted-foreground lg:mx-0">Three steps and you are training with feedback on every rep.</p>
+          </div>
+          <div className="flex flex-col gap-4">
+            {STEPS.map((step, index) => {
+              const highlighted = index === 1
+              return (
+                <Card
+                  key={step.title}
+                  className={cn(
+                    'flex-row items-start gap-4 rounded-xs px-6',
+                    highlighted ? 'border-2 border-gold-deep bg-gold-ink/70 lg:-ml-10' : 'border-border',
+                  )}
+                >
+                  <span className={cn('grid size-11 shrink-0 place-items-center rounded-full border', highlighted ? 'border-gold-deep text-gold' : 'border-border text-[#b2c1d0]')}>
+                    <Icon icon={step.icon} />
+                  </span>
+                  <div>
+                    <h3 className={cn("font-sans text-lg font-semibold tracking-normal", highlighted ? 'text-gold' : 'text-[#e8ecf1]')}>{step.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{step.text}</p>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
         </div>
       </section>
 
@@ -362,8 +364,7 @@ export default function Landing() {
       <div className="divider-wood" />
 
       {/* ---------- Coaching cues ---------- */}
-      <section className="relative overflow-hidden py-16 sm:py-24">
-        <img src="/landing/dark-gym.webp" alt="" loading="lazy" className="absolute inset-0 size-full object-cover opacity-15" />
+      <section className="landing-cues relative overflow-hidden py-16 sm:py-24">
         <div className="relative mx-auto max-w-3xl px-5 text-center sm:px-8">
           <SectionTitle title="Cues while you train" text="Workout Coach talks you through each set, so you fix form mid-rep instead of after." />
           <div className="mt-12 flex min-h-[220px] items-center gap-4" {...cueAuto}>
